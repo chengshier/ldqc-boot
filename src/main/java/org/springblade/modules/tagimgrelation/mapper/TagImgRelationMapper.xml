@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.tagimgrelation.mapper.TagImgRelationMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="tagImgRelationResultMap" type="org.springblade.modules.tagimgrelation.pojo.entity.TagImgRelationEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="mid" property="mid"/>
+        <result column="tid" property="tid"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+
+    <select id="selectTagImgRelationPage" resultMap="tagImgRelationResultMap">
+        select * from t_tag_img_relation where is_deleted = 0
+    </select>
+
+
+    <select id="exportTagImgRelation" resultType="org.springblade.modules.tagimgrelation.excel.TagImgRelationExcel">
+        SELECT * FROM t_tag_img_relation ${ew.customSqlSegment}
+    </select>
+
+</mapper>

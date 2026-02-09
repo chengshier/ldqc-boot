@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.imgDetail.mapper.ImgDetailMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="imgDetailResultMap" type="org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="content" property="content"/>
+        <result column="cover" property="cover"/>
+        <result column="user_id" property="userId"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="category_pid" property="categoryPid"/>
+        <result column="imgs_url" property="imgsUrl"/>
+        <result column="count" property="count"/>
+        <result column="sort" property="sort"/>
+        <result column="view_count" property="viewCount"/>
+        <result column="agree_count" property="agreeCount"/>
+        <result column="collection_count" property="collectionCount"/>
+        <result column="comment_count" property="commentCount"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+
+    <select id="selectImgDetailPage" resultMap="imgDetailResultMap">
+        select * from t_img_detail where is_deleted = 0
+    </select>
+
+
+    <select id="exportImgDetail" resultType="org.springblade.modules.imgDetail.excel.ImgDetailExcel">
+        SELECT * FROM t_img_detail 
+    </select>
+
+</mapper>

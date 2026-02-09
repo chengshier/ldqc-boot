@@ -1,0 +1,90 @@
+#数据源配置
+spring:
+  data:
+    redis:
+      ##redis 单机环境配置
+      ##将docker脚本部署的redis服务映射为宿主机ip
+      ##生产环境推荐使用阿里云高可用redis服务并设置密码
+      host: hw.wit.cn
+      port: 9999
+      password: Wiot@xm@2022_
+      database: 6
+      ssl:
+        enabled: false
+      ##redis 集群环境配置
+      #cluster:
+      #  nodes: 127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003
+      #  commandTimeout: 5000
+  datasource:
+    url: jdbc:mysql://rm-bp1531qh1ibq560l5km.mysql.rds.aliyuncs.com:3306/ldqc?useSSL=false&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&serverTimezone=GMT%2B8&nullCatalogMeansCurrent=true&allowPublicKeyRetrieval=true
+    username: gatherwit
+    password: Wit@5685199@!!!
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: 123456
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        prefetch: 1
+        concurrency: 3
+        acknowledge-mode: manual
+
+
+#第三方登陆
+social:
+  enabled: true
+  domain: http://127.0.0.1:2888
+
+#oss默认配置
+oss:
+  #开启oss配置
+  enabled: true
+  #开启oss类型
+  #minio、s3、qiniu、alioss、huaweiobs、tencentcos
+  name: minio
+  #租户模式
+  tenant-mode: false
+  #oss服务地址
+  endpoint: https://file.wit.cn
+  #oss转换服务地址，用于内网上传后将返回地址改为转换的外网地址
+  #transform-endpoint: http://172.30.0.90:9000
+  #访问key
+  access-key: minio_admin
+  #密钥key
+  secret-key: Wit@minio@2022_
+  #存储桶
+  bucket-name: ldqc
+
+#blade配置
+blade:
+  #分布式锁配置
+  lock:
+    ##是否启用分布式锁
+    enabled: false
+    ##将docker脚本部署的redis服务映射为宿主机ip
+    ##生产环境推荐使用阿里云高可用redis服务并设置密码
+    address: redis://172.30.0.63:6379
+    password: bladexadmin
+
+#社交模块配置
+#social:
+#  #ElasticSearch配置
+#  elasticsearch:
+#    enabled: false
+#    host: localhost
+#    port: 9200
+#    scheme: http
+#  #WebSocket配置
+#  websocket:
+#    enabled: false
+#  #推荐系统配置
+#  recommend:
+#    enabled: false
+#    model-path: /root/jar/distiluse-base-multilingual-cased-v1.zip
+
+#RabbitMQ配置
+#spring:

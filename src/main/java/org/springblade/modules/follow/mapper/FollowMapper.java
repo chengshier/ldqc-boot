@@ -1,0 +1,79 @@
+/**
+ * BladeX Commercial License Agreement
+ * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
+ * <p>
+ * Use of this software is governed by the Commercial License Agreement
+ * obtained after purchasing a license from BladeX.
+ * <p>
+ * 1. This software is for development use only under a valid license
+ * from BladeX.
+ * <p>
+ * 2. Redistribution of this software's source code to any third party
+ * without a commercial license is strictly prohibited.
+ * <p>
+ * 3. Licensees may copyright their own code but cannot use segments
+ * from this software for such purposes. Copyright of this software
+ * remains with BladeX.
+ * <p>
+ * Using this software signifies agreement to this License, and the software
+ * must not be used for illegal purposes.
+ * <p>
+ * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
+ * not liable for any claims arising from secondary or illegal development.
+ * <p>
+ * Author: Chill Zhuang (bladejava@qq.com)
+ */
+package org.springblade.modules.follow.mapper;
+
+import org.springblade.modules.follow.pojo.entity.FollowEntity;
+import org.springblade.modules.follow.pojo.vo.FollowVO;
+import org.springblade.modules.follow.excel.FollowExcel;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.apache.ibatis.annotations.Param;
+import org.springblade.modules.system.pojo.vo.TrendVO;
+
+import java.util.List;
+
+/**
+ * 关注表 Mapper 接口
+ *
+ * @author BladeX
+ * @since 2026-01-27
+ */
+public interface FollowMapper extends BaseMapper<FollowEntity> {
+
+	/**
+	 * 自定义分页
+	 *
+	 * @param page 分页参数
+	 * @param follow 查询参数
+	 * @return List<FollowVO>
+	 */
+	List<FollowVO> selectFollowPage(IPage page, FollowVO follow);
+
+
+	/**
+	 * 获取导出数据
+	 *
+	 * @param queryWrapper 查询条件
+	 * @return List<FollowExcel>
+	 */
+	List<FollowExcel> exportFollow(@Param("ew") Wrapper<FollowEntity> queryWrapper);
+
+
+	/**
+	 * 得到关注的所有动态
+	 *
+	 * @param page 分页参数 (limit offset handled by SQL or MyBatis Page?)
+	 *             The original SQL used ${(page-1)*limit},${limit} which suggests manual pagination in SQL.
+	 *             However, usually we pass Page object to Mapper.
+	 *             Let's stick to original SQL logic for now but use parameters.
+	 * @param limit limit
+	 * @param offset offset
+	 * @param uid uid
+	 * @return List<TrendVO>
+	 */
+	List<TrendVO> getAllFollowTrends(@Param("offset") long offset, @Param("limit") long limit, @Param("uid") String uid);
+}

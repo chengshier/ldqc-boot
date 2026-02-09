@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.messageuserrelation.mapper.MessageUserRelationMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="messageUserRelationResultMap" type="org.springblade.modules.messageuserrelation.pojo.entity.MessageUserRelationEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="send_id" property="sendId"/>
+        <result column="accept_id" property="acceptId"/>
+        <result column="count" property="count"/>
+        <result column="content" property="content"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+
+    <select id="selectMessageUserRelationPage" resultMap="messageUserRelationResultMap">
+        select * from t_message_user_relation where is_deleted = 0
+    </select>
+
+
+    <select id="exportMessageUserRelation" resultType="org.springblade.modules.messageuserrelation.excel.MessageUserRelationExcel">
+        SELECT * FROM t_message_user_relation ${ew.customSqlSegment}
+    </select>
+
+</mapper>

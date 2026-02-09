@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.follow.mapper.FollowMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="followResultMap" type="org.springblade.modules.follow.pojo.entity.FollowEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="uid" property="uid"/>
+        <result column="fid" property="fid"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+
+    <select id="selectFollowPage" resultMap="followResultMap">
+        select * from t_follow where is_deleted = 0
+    </select>
+
+
+    <select id="exportFollow" resultType="org.springblade.modules.follow.excel.FollowExcel">
+        SELECT * FROM t_follow ${ew.customSqlSegment}
+    </select>
+
+
+    <select id="getAllFollowTrends" resultType="org.springblade.modules.system.pojo.vo.TrendVO">
+        -- 查询当前用户发布的图片详情
+        SELECT
+            i.id as mid,
+            i.imgs_url,
+            i.content,
+            i.agree_count,
+            i.comment_count,
+            i.update_time as time,
+        a.id as album_id,
+        a.name as album_name,
+        u.id AS user_id,
+        u.name AS username,
+        u.avatar AS avatar,
+        if(ac.uid != '' ,1,0)as is_agree
+        FROM
+            t_img_detail AS i
+            LEFT JOIN blade_user AS u ON i.user_id = u.id
+            LEFT JOIN t_album_img_relation as air on i.id = air.mid
+            left join t_album as a on a.id = air.aid
+            left join t_agree_collect as ac on ac.agree_collect_id = i.id and ac.type =1 and ac.uid = #{uid}
+        WHERE
+            (i.user_id in (SELECT fid from t_follow where uid = #{uid} ) or i.user_id = #{uid} )  and a.uid = i.user_id and i.status = 1
+        ORDER BY
+            i.update_time DESC
+            LIMIT ${offset},${limit}
+    </select>
+
+</mapper>

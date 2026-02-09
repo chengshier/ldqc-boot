@@ -1,0 +1,104 @@
+/**
+ * BladeX Commercial License Agreement
+ * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
+ * <p>
+ * Use of this software is governed by the Commercial License Agreement
+ * obtained after purchasing a license from BladeX.
+ * <p>
+ * 1. This software is for development use only under a valid license
+ * from BladeX.
+ * <p>
+ * 2. Redistribution of this software's source code to any third party
+ * without a commercial license is strictly prohibited.
+ * <p>
+ * 3. Licensees may copyright their own code but cannot use segments
+ * from this software for such purposes. Copyright of this software
+ * remains with BladeX.
+ * <p>
+ * Using this software signifies agreement to this License, and the software
+ * must not be used for illegal purposes.
+ * <p>
+ * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
+ * not liable for any claims arising from secondary or illegal development.
+ * <p>
+ * Author: Chill Zhuang (bladejava@qq.com)
+ */
+package org.springblade.modules.comment.service;
+
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import org.springblade.modules.comment.pojo.dto.CommentDTO;
+import org.springblade.modules.comment.pojo.entity.CommentEntity;
+import org.springblade.modules.comment.pojo.vo.CommentVO;
+import org.springblade.modules.comment.excel.CommentExcel;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.springblade.core.mp.base.BaseService;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 评论表 服务类
+ *
+ * @author BladeX
+ * @since 2026-01-27
+ */
+public interface ICommentService extends BaseService<CommentEntity> {
+	/**
+	 * 自定义分页
+	 *
+	 * @param page 分页参数
+	 * @param comment 查询参数
+	 * @return IPage<CommentVO>
+	 */
+	IPage<CommentVO> selectCommentPage(IPage<CommentVO> page, CommentVO comment);
+
+
+	/**
+	 * 导出数据
+	 *
+	 * @param queryWrapper 查询条件
+	 * @return List<CommentExcel>
+	 */
+	List<CommentExcel> exportComment(Wrapper<CommentEntity> queryWrapper);
+
+
+	/**
+	 * 得到当前图片下的所有一级评论
+	 */
+	IPage<CommentVO> getAllOneCommentByImgId(IPage<CommentVO> page, String mid, String uid);
+
+	/**
+	 * 增加一条评论
+	 */
+	CommentVO addComment(CommentDTO comment);
+
+	/**
+	 * 分页查询一级评论下的所有二级评论
+	 */
+	IPage<CommentVO> getAllTwoCommentByOneId(IPage<CommentVO> page, String id, String uid);
+
+	/**
+	 * 得到当前一级评论下的所有二级评论
+	 */
+	List<CommentVO> getAllTwoComment(String id, String uid);
+
+	/**
+	 * 查看所有回复的评论
+	 */
+	List<CommentVO> getAllReplyComment(IPage<CommentVO> page, String uid);
+
+	/**
+	 * 得到所有的一级评论并携带一个二级评论
+	 */
+	IPage<CommentVO> getAllComment(IPage<CommentVO> page, String mid, String uid);
+
+	/**
+	 * 删除评论
+	 */
+	void delComment(String id);
+
+	/**
+	 * 跳转评论
+	 */
+	Map<String, Object> scrollComment(String id, String mid, String uid);
+
+}

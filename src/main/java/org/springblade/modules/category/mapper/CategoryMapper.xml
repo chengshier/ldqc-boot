@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.category.mapper.CategoryMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="categoryResultMap" type="org.springblade.modules.category.pojo.entity.CategoryEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="name" property="name"/>
+        <result column="pid" property="pid"/>
+        <result column="sort" property="sort"/>
+        <result column="count" property="count"/>
+        <result column="description" property="description"/>
+        <result column="cover" property="cover"/>
+        <result column="hot_cover" property="hotCover"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+
+    <select id="selectCategoryPage" resultMap="categoryResultMap">
+        select * from t_category where is_deleted = 0
+    </select>
+
+
+    <select id="exportCategory" resultType="org.springblade.modules.category.excel.CategoryExcel">
+        SELECT * FROM t_category ${ew.customSqlSegment}
+    </select>
+
+</mapper>

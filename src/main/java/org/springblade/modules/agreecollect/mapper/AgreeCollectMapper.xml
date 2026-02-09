@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.agreecollect.mapper.AgreeCollectMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="agreeCollectResultMap" type="org.springblade.modules.agreecollect.pojo.entity.AgreeCollectEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="uid" property="uid"/>
+        <result column="agree_collect_id" property="agreeCollectId"/>
+        <result column="agree_collect_uid" property="agreeCollectUid"/>
+        <result column="type" property="type"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+
+    <select id="selectAgreeCollectPage" resultMap="agreeCollectResultMap">
+        select * from t_agree_collect where is_deleted = 0
+    </select>
+
+
+    <select id="exportAgreeCollect" resultType="org.springblade.modules.agreecollect.excel.AgreeCollectExcel">
+        SELECT * FROM t_agree_collect ${ew.customSqlSegment}
+    </select>
+
+</mapper>
