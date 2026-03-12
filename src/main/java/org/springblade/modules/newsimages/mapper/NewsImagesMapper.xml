@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.newsimages.mapper.NewsImagesMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="newsImagesResultMap" type="org.springblade.modules.newsimages.pojo.entity.NewsImagesEntity">
+        <result column="id" property="id"/>
+        <result column="news_id" property="newsId"/>
+        <result column="image_url" property="imageUrl"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectNewsImagesPage" resultMap="newsImagesResultMap">
+        select * from n_news_images where is_deleted = 0
+    </select>
+
+
+    <select id="exportNewsImages" resultType="org.springblade.modules.newsimages.excel.NewsImagesExcel">
+        SELECT * FROM n_news_images ${ew.customSqlSegment}
+    </select>
+
+</mapper>

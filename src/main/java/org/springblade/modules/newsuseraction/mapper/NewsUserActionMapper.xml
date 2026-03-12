@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.newsuseraction.mapper.NewsUserActionMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="newsUserActionResultMap" type="org.springblade.modules.newsuseraction.pojo.entity.NewsUserActionEntity">
+        <result column="id" property="id"/>
+        <result column="news_id" property="newsId"/>
+        <result column="user_id" property="userId"/>
+        <result column="action_type" property="actionType"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectNewsUserActionPage" resultMap="newsUserActionResultMap">
+        select * from n_news_user_action where is_deleted = 0
+    </select>
+
+
+    <select id="exportNewsUserAction" resultType="org.springblade.modules.newsuseraction.excel.NewsUserActionExcel">
+        SELECT * FROM n_news_user_action ${ew.customSqlSegment}
+    </select>
+
+</mapper>

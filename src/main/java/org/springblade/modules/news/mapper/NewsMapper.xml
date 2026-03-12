@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.news.mapper.NewsMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="newsResultMap" type="org.springblade.modules.news.pojo.entity.NewsEntity">
+        <result column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="abstracts" property="abstracts"/>
+        <result column="content" property="content"/>
+        <result column="cover" property="cover"/>
+        <result column="username" property="username"/>
+        <result column="author_id" property="authorId"/>
+        <result column="view_count" property="viewCount"/>
+        <result column="comment_count" property="commentCount"/>
+        <result column="agree_count" property="agreeCount"/>
+        <result column="share_count" property="shareCount"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="is_top" property="isTop"/>
+        <result column="news_status" property="newsStatus"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="status" property="status"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="publish_time" property="publishTime"/>
+    </resultMap>
+
+
+    <!-- 自定义分页查询（带分类名称） -->
+    <select id="selectNewsPage" resultType="org.springblade.modules.news.pojo.vo.NewsVO">
+        SELECT
+        n.*,
+        nc.name AS categoryName
+        FROM n_news n
+        LEFT JOIN n_news_category nc ON n.category_id = nc.id AND nc.is_deleted = 0
+        WHERE n.is_deleted = 0
+        <if test="news != null">
+            <if test="news.categoryId != null">
+                AND n.category_id = #{news.categoryId}
+            </if>
+            <if test="news.newsStatus != null">
+                AND n.news_status = #{news.newsStatus}
+            </if>
+            <if test="news.isTop != null">
+                AND n.is_top = #{news.isTop}
+            </if>
+            <if test="news.title != null and news.title != ''">
+                AND n.title LIKE CONCAT('%', #{news.title}, '%')
+            </if>
+            <if test="news.username != null and news.username != ''">
+                AND n.username = #{news.username}
+            </if>
+        </if>
+        ORDER BY n.is_top DESC, n.publish_time DESC, n.create_time DESC
+    </select>
+
+    <!-- 获取置顶新闻（热度新闻TOP1） -->
+    <select id="getTopNews" resultMap="newsResultMap">
+        SELECT * FROM n_news
+        WHERE news_status = 1 AND is_top = 1 AND is_deleted = 0
+        ORDER BY view_count DESC, publish_time DESC
+            LIMIT 1
+    </select>
+
+    <!-- 增加浏览量 -->
+    <update id="incrementViewCount">
+        UPDATE n_news
+        SET view_count = view_count + 1
+        WHERE id = #{id}
+    </update>
+
+    <!-- 导出数据 -->
+    <select id="exportNews" resultType="org.springblade.modules.news.excel.NewsExcel">
+        SELECT * FROM n_news ${ew.customSqlSegment}
+    </select>
+
+</mapper>
