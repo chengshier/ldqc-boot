@@ -50,6 +50,41 @@ public class ImgDetailEntity extends TenantEntity {
     private String imgsUrl;
 
     /**
+     * 媒体类型[image,video]
+     */
+    private String mediaType;
+
+    /**
+     * 媒体地址
+     */
+    private String mediaUrl;
+
+    /**
+     * 媒体封面/首帧地址
+     */
+    private String posterUrl;
+
+    /**
+     * 媒体时长，单位秒
+     */
+    private Integer duration;
+
+    /**
+     * 文件大小，单位字节
+     */
+    private Long fileSize;
+
+    /**
+     * 媒体宽度
+     */
+    private Integer width;
+
+    /**
+     * 媒体高度
+     */
+    private Integer height;
+
+    /**
      * 图片数量
      */
     private Integer count;

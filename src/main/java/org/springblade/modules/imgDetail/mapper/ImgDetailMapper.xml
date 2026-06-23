@@ -12,6 +12,13 @@
         <result column="category_id" property="categoryId"/>
         <result column="category_pid" property="categoryPid"/>
         <result column="imgs_url" property="imgsUrl"/>
+        <result column="media_type" property="mediaType"/>
+        <result column="media_url" property="mediaUrl"/>
+        <result column="poster_url" property="posterUrl"/>
+        <result column="duration" property="duration"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="width" property="width"/>
+        <result column="height" property="height"/>
         <result column="count" property="count"/>
         <result column="sort" property="sort"/>
         <result column="view_count" property="viewCount"/>

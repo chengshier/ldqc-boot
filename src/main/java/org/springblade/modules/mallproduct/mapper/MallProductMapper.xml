@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.mallproduct.mapper.MallProductMapper">
+
+    <select id="selectMallProductPage" resultType="org.springblade.modules.mallproduct.pojo.vo.MallProductVO">
+        select * from mall_product where is_deleted = 0
+    </select>
+
+    <select id="exportMallProduct" resultType="org.springblade.modules.mallproduct.excel.MallProductExcel">
+        select * from mall_product
+    </select>
+
+</mapper>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.ruleversionnotice.mapper.RuleVersionNoticeMapper">
+
+    <select id="selectRuleVersionNoticePage" resultType="org.springblade.modules.ruleversionnotice.pojo.vo.RuleVersionNoticeVO">
+        select * from rule_version_notice where is_deleted = 0
+    </select>
+
+    <select id="exportRuleVersionNotice" resultType="org.springblade.modules.ruleversionnotice.excel.RuleVersionNoticeExcel">
+        select * from rule_version_notice
+    </select>
+
+</mapper>

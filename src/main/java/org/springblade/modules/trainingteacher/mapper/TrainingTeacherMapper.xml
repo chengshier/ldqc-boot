@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.trainingteacher.mapper.TrainingTeacherMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="trainingTeacherResultMap" type="org.springblade.modules.trainingteacher.pojo.entity.TrainingTeacherEntity">
+        <result column="id" property="id"/>
+        <result column="org_id" property="orgId"/>
+        <result column="name" property="name"/>
+        <result column="avatar" property="avatar"/>
+        <result column="title" property="title"/>
+        <result column="tags" property="tags"/>
+        <result column="intro" property="intro"/>
+        <result column="experience_years" property="experienceYears"/>
+        <result column="rating" property="rating"/>
+        <result column="is_recommended" property="isRecommended"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="status" property="status"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectTrainingTeacherPage" resultMap="trainingTeacherResultMap">
+        select *
+        from ldqc_training_teacher
+        <where>
+            is_deleted = 0
+            <if test="trainingTeacher.orgId != null">
+                and org_id = #{trainingTeacher.orgId}
+            </if>
+            <if test="trainingTeacher.name != null and trainingTeacher.name != ''">
+                and name like concat('%', #{trainingTeacher.name}, '%')
+            </if>
+            <if test="trainingTeacher.title != null and trainingTeacher.title != ''">
+                and title like concat('%', #{trainingTeacher.title}, '%')
+            </if>
+            <if test="trainingTeacher.tags != null and trainingTeacher.tags != ''">
+                and tags like concat('%', #{trainingTeacher.tags}, '%')
+            </if>
+            <if test="trainingTeacher.intro != null and trainingTeacher.intro != ''">
+                and intro like concat('%', #{trainingTeacher.intro}, '%')
+            </if>
+            <if test="trainingTeacher.experienceYears != null">
+                and experience_years = #{trainingTeacher.experienceYears}
+            </if>
+            <if test="trainingTeacher.rating != null">
+                and rating = #{trainingTeacher.rating}
+            </if>
+            <if test="trainingTeacher.isRecommended != null">
+                and is_recommended = #{trainingTeacher.isRecommended}
+            </if>
+            <if test="trainingTeacher.sortOrder != null">
+                and sort_order = #{trainingTeacher.sortOrder}
+            </if>
+            <if test="trainingTeacher.status != null">
+                and status = #{trainingTeacher.status}
+            </if>
+        </where>
+        order by sort_order desc, create_time desc
+    </select>
+
+
+    <select id="exportTrainingTeacher" resultType="org.springblade.modules.trainingteacher.excel.TrainingTeacherExcel">
+        SELECT * FROM ldqc_training_teacher ${ew.customSqlSegment}
+    </select>
+
+</mapper>

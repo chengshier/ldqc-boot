@@ -25,7 +25,23 @@
 
 
     <select id="selectNewsCommentPage" resultMap="newsCommentResultMap">
-        select * from n_news_comment where is_deleted = 0
+        select * from n_news_comment
+        <where>
+            is_deleted = 0
+            <if test="newsComment != null and newsComment.newsId != null">
+                and news_id = #{newsComment.newsId}
+            </if>
+            <if test="newsComment != null and newsComment.commentStatus != null">
+                and comment_status = #{newsComment.commentStatus}
+            </if>
+            <if test="newsComment != null and newsComment.userId != null">
+                and user_id = #{newsComment.userId}
+            </if>
+            <if test="newsComment != null and newsComment.parentId != null">
+                and parent_id = #{newsComment.parentId}
+            </if>
+        </where>
+        order by create_time desc
     </select>
 
 

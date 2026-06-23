@@ -72,7 +72,10 @@ public class BladeConfiguration implements WebMvcConfigurer {
 				"/static/**",
 				"/webjars/**",
 				"/swagger-resources/**",
-				"/druid/**"
+				"/druid/**",
+				"/blade-imgDetail/imgDetail/page",
+				"/blade-recommend/recommendToUserByCF",
+				"/blade-category/category/getTreeCategory"
 			)
 			// 认证鉴权配置
 			.authEnabled()

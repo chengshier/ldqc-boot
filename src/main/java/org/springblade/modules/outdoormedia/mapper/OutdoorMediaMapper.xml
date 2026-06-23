@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.outdoormedia.mapper.OutdoorMediaMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="outdoorMediaResultMap" type="org.springblade.modules.outdoormedia.pojo.entity.OutdoorMediaEntity">
+        <result column="id" property="id"/>
+        <result column="outdoor_id" property="outdoorId"/>
+        <result column="media_url" property="mediaUrl"/>
+        <result column="media_type" property="mediaType"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectOutdoorMediaPage" resultMap="outdoorMediaResultMap">
+        select * from ldqc_outdoor_media where is_deleted = 0
+    </select>
+
+
+    <select id="exportOutdoorMedia" resultType="org.springblade.modules.outdoormedia.excel.OutdoorMediaExcel">
+        SELECT * FROM ldqc_outdoor_media ${ew.customSqlSegment}
+    </select>
+
+</mapper>

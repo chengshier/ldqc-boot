@@ -63,4 +63,8 @@ public class ImgDetailVO extends ImgDetailEntity {
      * 其他用户ID
      */
     private Long otherUserId;
+    /**
+     * 当前用户是否已点赞
+     */
+    private Boolean isAgree;
 }

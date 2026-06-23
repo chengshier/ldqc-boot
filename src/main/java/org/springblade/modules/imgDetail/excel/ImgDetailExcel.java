@@ -56,6 +56,34 @@ private Long categoryPid;
 private String imgsUrl;
 
 @ColumnWidth(20)
+@ExcelProperty("媒体类型")
+private String mediaType;
+
+@ColumnWidth(20)
+@ExcelProperty("媒体地址")
+private String mediaUrl;
+
+@ColumnWidth(20)
+@ExcelProperty("媒体封面/首帧")
+private String posterUrl;
+
+@ColumnWidth(20)
+@ExcelProperty("媒体时长(秒)")
+private Integer duration;
+
+@ColumnWidth(20)
+@ExcelProperty("文件大小(字节)")
+private Long fileSize;
+
+@ColumnWidth(20)
+@ExcelProperty("媒体宽度")
+private Integer width;
+
+@ColumnWidth(20)
+@ExcelProperty("媒体高度")
+private Integer height;
+
+@ColumnWidth(20)
 @ExcelProperty("图片数量")
 private Integer count;
 

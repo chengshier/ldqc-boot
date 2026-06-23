@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.pointssigninstat.mapper.PointsSigninStatMapper">
+
+    <select id="selectPointsSigninStatPage" resultType="org.springblade.modules.pointssigninstat.pojo.vo.PointsSigninStatVO">
+        select * from points_signin_stat where is_deleted = 0
+    </select>
+
+    <select id="exportPointsSigninStat" resultType="org.springblade.modules.pointssigninstat.excel.PointsSigninStatExcel">
+        select * from points_signin_stat
+    </select>
+
+</mapper>

@@ -166,15 +166,29 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 		agreeCollectNotice(agreeCollectDTO, agreeCollect);
 	}
 
+
 	@Override
 	public boolean isAgree(AgreeCollectDTO agreeCollectDTO) {
+		if (agreeCollectDTO == null || agreeCollectDTO.getUid() == null || agreeCollectDTO.getAgreeCollectId() == null || agreeCollectDTO.getType() == null) {
+			return false;
+		}
+		boolean redisHit;
 		if (agreeCollectDTO.getType() == 1) {
 			String agreeImgKey = PlatformConstant.AGREE_IMG_KEY + agreeCollectDTO.getAgreeCollectId();
-			return redisUtils.sIsMember(agreeImgKey, String.valueOf(agreeCollectDTO.getUid()));
+			redisHit = redisUtils.sIsMember(agreeImgKey, String.valueOf(agreeCollectDTO.getUid()));
 		} else {
 			String agreeCommentKey = PlatformConstant.AGREE_COMMENT_KEY + agreeCollectDTO.getAgreeCollectId();
-			return redisUtils.sIsMember(agreeCommentKey, String.valueOf(agreeCollectDTO.getUid()));
+			redisHit = redisUtils.sIsMember(agreeCommentKey, String.valueOf(agreeCollectDTO.getUid()));
 		}
+		if (redisHit) {
+			return true;
+		}
+		Long count = this.count(new QueryWrapper<AgreeCollectEntity>()
+			.eq("uid", agreeCollectDTO.getUid())
+			.eq("agree_collect_id", agreeCollectDTO.getAgreeCollectId())
+			.eq("type", agreeCollectDTO.getType())
+			.eq("is_deleted", 0));
+		return count != null && count > 0;
 	}
 
 	@Override
@@ -338,7 +352,7 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 	@Override
 	public IPage<AgreeCollectVO> getAllCollection(IPage<AgreeCollectVO> page, String uid, Integer type) {
 		IPage<AgreeCollectEntity> agreeCollectPage = this.page(new Page<>(page.getCurrent(), page.getSize()),
-			new QueryWrapper<AgreeCollectEntity>().and(e -> e.eq("uid", uid).eq("type", type)).orderByDesc("create_time"));
+			new QueryWrapper<AgreeCollectEntity>().and(e -> e.eq("uid", uid).eq("type", type).eq("is_deleted", 0)).orderByDesc("create_time"));
 
 		List<AgreeCollectEntity> agreeCollectList = agreeCollectPage.getRecords();
 
@@ -349,7 +363,7 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 		List<Long> ids = agreeCollectList.stream().map(AgreeCollectEntity::getAgreeCollectId).collect(Collectors.toList());
 		List<AgreeCollectVO> agreeCollectVoList = new ArrayList<>();
 
-		if (type == 2) {
+		if (type == 1 || type == 2) {
 			//查找所有收藏的图片
 			List<Long> uids = agreeCollectList.stream().map(AgreeCollectEntity::getAgreeCollectUid).collect(Collectors.toList());
 
@@ -377,13 +391,15 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 				if (imgDetail != null && user != null) {
 					agreeCollectVo.setMid(imgDetail.getId());
 					agreeCollectVo.setCover(imgDetail.getCover());
-					agreeCollectVo	.setUid(user.getId());
-					agreeCollectVo	.setAvatar(user.getAvatar());
+					agreeCollectVo.setUid(user.getId());
+					agreeCollectVo.setAvatar(user.getAvatar());
 					agreeCollectVo.setUsername(user.getName());
 					agreeCollectVo.setType(item.getType());
 					agreeCollectVo.setCreateDate(item.getCreateTime());
 					agreeCollectVo.setContent(imgDetail.getContent());
-					agreeCollectVo.setCount(imgDetail.getCount()) ;// ImgDetailEntity might not have count, check VO
+					agreeCollectVo.setCount(imgDetail.getCount());
+					agreeCollectVo.setAgreeCount(imgDetail.getAgreeCount());
+					agreeCollectVo.setCommentCount(imgDetail.getCommentCount());
 					agreeCollectVo.setCollectionCount(imgDetail.getCollectionCount());
 					agreeCollectVoList.add(agreeCollectVo);
 				}
@@ -473,6 +489,19 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 
 		res.put(PlatformConstant.MESSAGE, PlatformConstant.COLLECTION_SUCCESS);
 		return res;
+	}
+
+	@Override
+	public boolean isCollection(AgreeCollectDTO agreeCollectDTO) {
+		if (agreeCollectDTO == null || agreeCollectDTO.getUid() == null || agreeCollectDTO.getAgreeCollectId() == null || agreeCollectDTO.getType() == null) {
+			return false;
+		}
+		Long count = this.count(new QueryWrapper<AgreeCollectEntity>()
+			.eq("uid", agreeCollectDTO.getUid())
+			.eq("agree_collect_id", agreeCollectDTO.getAgreeCollectId())
+			.eq("type", agreeCollectDTO.getType())
+			.eq("is_deleted", 0));
+		return count != null && count > 0;
 	}
 
 	@Override
@@ -574,5 +603,4 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 		}
 		redisUtils.set(userRecordKey, JsonUtil.toJson(userRecordVO));
 	}
-
 }

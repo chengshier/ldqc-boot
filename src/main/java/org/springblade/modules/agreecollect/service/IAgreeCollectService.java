@@ -114,6 +114,14 @@ public interface IAgreeCollectService extends BaseService<AgreeCollectEntity> {
 	Map<String, String> collection(AgreeCollectDTO agreeCollectDTO);
 
 	/**
+	 * 查看是否收藏
+	 *
+	 * @param agreeCollectDTO
+	 * @return
+	 */
+	boolean isCollection(AgreeCollectDTO agreeCollectDTO);
+
+	/**
 	 * 取消收藏
 	 *
 	 * @param agreeCollectDTO

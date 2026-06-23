@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.sportinvite.mapper.SportInviteMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="sportInviteResultMap" type="org.springblade.modules.sportinvite.pojo.entity.SportInviteEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="status" property="status"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="invite_status" property="inviteStatus"/>
+        <result column="publisher_user_id" property="publisherUserId"/>
+        <result column="sport_type" property="sportType"/>
+        <result column="title" property="title"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="venue_name" property="venueName"/>
+        <result column="address_detail" property="addressDetail"/>
+        <result column="longitude" property="longitude"/>
+        <result column="latitude" property="latitude"/>
+        <result column="fee_type" property="feeType"/>
+        <result column="current_people" property="currentPeople"/>
+        <result column="target_people" property="targetPeople"/>
+        <result column="gender_limit" property="genderLimit"/>
+        <result column="age_min" property="ageMin"/>
+        <result column="age_max" property="ageMax"/>
+        <result column="level_limit" property="levelLimit"/>
+        <result column="requirement" property="requirement"/>
+        <result column="need_audit" property="needAudit"/>
+        <result column="organizer_level" property="organizerLevel"/>
+        <result column="organizer_frequency" property="organizerFrequency"/>
+        <result column="organizer_intro" property="organizerIntro"/>
+        <result column="contact_phone" property="contactPhone"/>
+        <result column="contact_wechat" property="contactWechat"/>
+        <result column="contact_visible_rule" property="contactVisibleRule"/>
+        <result column="description" property="description"/>
+        <result column="notice" property="notice"/>
+        <result column="cover_image" property="coverImage"/>
+    </resultMap>
+
+
+    <select id="selectSportInvitePage" resultMap="sportInviteResultMap">
+        select * from ldqc_sport_invite where is_deleted = 0
+    </select>
+
+
+    <select id="exportSportInvite" resultType="org.springblade.modules.sportinvite.excel.SportInviteExcel">
+        SELECT * FROM ldqc_sport_invite ${ew.customSqlSegment}
+    </select>
+
+</mapper>

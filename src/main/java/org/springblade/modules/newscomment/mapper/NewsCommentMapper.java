@@ -49,7 +49,7 @@ public interface NewsCommentMapper extends BaseMapper<NewsCommentEntity> {
 	 * @param newsComment 查询参数
 	 * @return List<NewsCommentVO>
 	 */
-	List<NewsCommentVO> selectNewsCommentPage(IPage page, NewsCommentVO newsComment);
+	List<NewsCommentVO> selectNewsCommentPage(IPage page, @Param("newsComment") NewsCommentVO newsComment);
 
 
 	/**

@@ -11,8 +11,16 @@ server:
     buffer-size: 1024
     # 是否分配的直接内存
     direct-buffers: true
+    # 添加连接超时配置 (毫秒)
+    connection-timeout: 60000
+    # 添加请求读取超时配置 (毫秒)
+    request-parse-timeout: 60000
 
 spring:
+  mvc:
+    async:
+      # 配置异步请求超时时间 (毫秒)
+      request-timeout: 60000
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     #driver-class-name: org.postgresql.Driver
@@ -300,3 +308,32 @@ blade:
 WECHAT:
   app-id: wx6e0a1cfbeb8fa552
   app-secret: 4a7911ca423a65d84b12ffa50ea58f23
+
+# 微信公众号消息推送配置（新工具类使用）
+wechat:
+  mp:
+    app-id: ${WECHAT.app-id}
+    app-secret: ${WECHAT.app-secret}
+    token-cache-prefix: "wechat:mp:access-token:"
+    api-base-url: https://api.weixin.qq.com
+  pay:
+    # 商户号（必填）
+    mch-id:
+    # 商户 API 证书序列号（必填）
+    merchant-serial-no:
+    # 商户私钥路径（PKCS8 PEM），与 private-key-pem 二选一
+    private-key-path:
+    # 商户私钥内容（PKCS8 PEM），与 private-key-path 二选一
+    private-key-pem:
+    # 小程序 appId（必填）
+    app-id:
+    # APIv3 密钥（支付回调解密使用，32位）
+    api-v3-key:
+    # 前端调起支付签名 key
+    pay-sign-key:
+    # 支付回调地址
+    notify-url:
+    # 退款回调地址
+    refund-notify-url:
+    # 微信支付网关
+    base-url: https://api.mch.weixin.qq.com

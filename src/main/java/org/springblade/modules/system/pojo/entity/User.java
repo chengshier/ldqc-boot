@@ -31,6 +31,7 @@ import lombok.EqualsAndHashCode;
 import org.springblade.core.tenant.mp.TenantEntity;
 import org.springblade.core.tool.jackson.Sensitive;
 import org.springblade.core.tool.sensitive.SensitiveType;
+import com.baomidou.mybatisplus.annotation.TableField;
 
 import java.io.Serial;
 import java.util.Date;
@@ -79,12 +80,12 @@ private String avatar;
 /**
  * 邮箱
  */
-@Sensitive(type = SensitiveType.EMAIL)
+//@Sensitive(type = SensitiveType.EMAIL)
 private String email;
 /**
  * 手机
  */
-@Sensitive(type = SensitiveType.MOBILE)
+//@Sensitive(type = SensitiveType.MOBILE)
 private String phone;
 /**
  * 生日
@@ -129,5 +130,82 @@ private Long followCount;
  * 粉丝数量
  */
 private Long fanCount;
+
+/**
+ * 获赞数量
+ */
+@TableField(exist = false)
+private Long likeCount;
+
+/**
+ * 收藏数量
+ */
+@TableField(exist = false)
+private Long collectCount;
+
+/**
+ * 用户简介
+	 */
+	private String description;
+
+	/**
+	 * 是否达人[0:否,1:是]
+	 */
+	private Integer isTalent;
+
+	/**
+	 * 达人排序值,越大越靠前
+	 */
+	private Integer talentSort;
+
+	/**
+	 * 达人标签,逗号分隔
+	 */
+	private String talentTags;
+
+	/**
+	 * 达人简介
+	 */
+	private String talentIntro;
+
+	/**
+	 * 是否在线[0:否,1:是]
+	 */
+	private Integer talentOnline;
+	/**
+	 * 认证状态[0:未认证,1:审核中,2:已通过,3:已驳回]
+	 */
+	private Integer authStatus;
+
+	/**
+	 * 主身份编码
+	 */
+	private String mainIdentityCode;
+
+	/**
+	 * 主身份名称
+	 */
+	private String mainIdentityName;
+
+	/**
+	 * 已通过身份,逗号分隔
+	 */
+	private String identityBadges;
+
+	/**
+	 * 最近一次驳回原因
+	 */
+	private String authRefuseReason;
+	/**
+	 * 个人封面图
+	 */
+	private String cover;
+
+
+	/**
+	 * 地址
+	 */
+	private String address;
+
 
 }

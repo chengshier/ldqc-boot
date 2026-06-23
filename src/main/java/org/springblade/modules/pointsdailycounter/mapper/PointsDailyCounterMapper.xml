@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.pointsdailycounter.mapper.PointsDailyCounterMapper">
+
+    <select id="selectPointsDailyCounterPage" resultType="org.springblade.modules.pointsdailycounter.pojo.vo.PointsDailyCounterVO">
+        select * from points_daily_counter where is_deleted = 0
+    </select>
+
+    <select id="exportPointsDailyCounter" resultType="org.springblade.modules.pointsdailycounter.excel.PointsDailyCounterExcel">
+        select * from points_daily_counter
+    </select>
+
+</mapper>

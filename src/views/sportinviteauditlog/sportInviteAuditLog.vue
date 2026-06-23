@@ -1,0 +1,225 @@
+<template>
+  <basic-container>
+    <avue-crud :option="option"
+               v-model:search="search"
+               v-model:page="page"
+               v-model="form"
+               :table-loading="loading"
+               :data="data"
+               :permission="permissionList"
+               :before-open="beforeOpen"
+               ref="crud"
+               @row-update="rowUpdate"
+               @row-save="rowSave"
+               @row-del="rowDel"
+               @search-change="searchChange"
+               @search-reset="searchReset"
+               @selection-change="selectionChange"
+               @current-change="currentChange"
+               @size-change="sizeChange"
+               @refresh-change="refreshChange"
+               @on-load="onLoad">
+      <template #menu-left>
+        <el-button type="danger"
+                   icon="el-icon-delete"
+                   plain
+                   v-if="permission.sportInviteAuditLog_delete"
+                   @click="handleDelete">删 除
+        </el-button>
+        <el-button type="warning"
+                   plain
+                   icon="el-icon-download"
+                   @click="handleExport">导 出
+        </el-button>
+      </template>
+    </avue-crud>
+  </basic-container>
+</template>
+
+<script>
+  import {getList, getDetail, add, update, remove} from "@/api/sportinviteauditlog/sportInviteAuditLog";
+  import option from "@/option/sportinviteauditlog/sportInviteAuditLog";
+  import {mapGetters} from "vuex";
+  import {exportBlob} from "@/api/common";
+  import {getToken} from '@/utils/auth';
+  import {downloadXls} from "@/utils/util";
+  import {dateNow} from "@/utils/date";
+  import NProgress from 'nprogress';
+  import 'nprogress/nprogress.css';
+
+  export default {
+    data() {
+      return {
+        form: {},
+        query: {},
+        search: {},
+        loading: true,
+        page: {
+          pageSize: 10,
+          currentPage: 1,
+          total: 0
+        },
+        selectionList: [],
+        option: option,
+        data: []
+      };
+    },
+    computed: {
+      ...mapGetters(["permission"]),
+      permissionList() {
+        return {
+          addBtn: this.validData(this.permission.sportInviteAuditLog_add, false),
+          viewBtn: this.validData(this.permission.sportInviteAuditLog_view, false),
+          delBtn: this.validData(this.permission.sportInviteAuditLog_delete, false),
+          editBtn: this.validData(this.permission.sportInviteAuditLog_edit, false)
+        };
+      },
+      ids() {
+        let ids = [];
+        this.selectionList.forEach(ele => {
+          ids.push(ele.id);
+        });
+        return ids.join(",");
+      }
+    },
+    methods: {
+      rowSave(row, done, loading) {
+        add(row).then(() => {
+          this.onLoad(this.page);
+          this.$message({
+            type: "success",
+            message: "操作成功!"
+          });
+          done();
+        }, error => {
+          loading();
+          window.console.log(error);
+        });
+      },
+      rowUpdate(row, index, done, loading) {
+        update(row).then(() => {
+          this.onLoad(this.page);
+          this.$message({
+            type: "success",
+            message: "操作成功!"
+          });
+          done();
+        }, error => {
+          loading();
+          console.log(error);
+        });
+      },
+      rowDel(row) {
+        this.$confirm("确定将选择数据删除?", {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          type: "warning"
+        })
+          .then(() => {
+            return remove(row.id);
+          })
+          .then(() => {
+            this.onLoad(this.page);
+            this.$message({
+              type: "success",
+              message: "操作成功!"
+            });
+          });
+      },
+      handleDelete() {
+        if (this.selectionList.length === 0) {
+          this.$message.warning("请选择至少一条数据");
+          return;
+        }
+        this.$confirm("确定将选择数据删除?", {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          type: "warning"
+        })
+          .then(() => {
+            return remove(this.ids);
+          })
+          .then(() => {
+            this.onLoad(this.page);
+            this.$message({
+              type: "success",
+              message: "操作成功!"
+            });
+            this.$refs.crud.toggleSelection();
+          });
+      },
+      handleExport() {
+        let downloadUrl = `/blade-sportinviteauditlog/sportInviteAuditLog/export-sportInviteAuditLog?${this.website.tokenHeader}=${getToken()}`;
+        const {
+        } = this.query;
+        let values = {
+        };
+        this.$confirm("是否导出数据?", "提示", {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          type: "warning"
+        }).then(() => {
+          NProgress.start();
+          exportBlob(downloadUrl, values).then(res => {
+            downloadXls(res.data, `运动邀约审核日志表${dateNow()}.xlsx`);
+            NProgress.done();
+          })
+        });
+      },
+      beforeOpen(done, type) {
+        if (["edit", "view"].includes(type)) {
+          getDetail(this.form.id).then(res => {
+            this.form = res.data.data;
+          });
+        }
+        done();
+      },
+      searchReset() {
+        this.query = {};
+        this.onLoad(this.page);
+      },
+      searchChange(params, done) {
+        this.query = params;
+        this.page.currentPage = 1;
+        this.onLoad(this.page, params);
+        done();
+      },
+      selectionChange(list) {
+        this.selectionList = list;
+      },
+      selectionClear() {
+        this.selectionList = [];
+        this.$refs.crud.toggleSelection();
+      },
+      currentChange(currentPage){
+        this.page.currentPage = currentPage;
+      },
+      sizeChange(pageSize){
+        this.page.pageSize = pageSize;
+      },
+      refreshChange() {
+        this.onLoad(this.page, this.query);
+      },
+      onLoad(page, params = {}) {
+        this.loading = true;
+
+        const {
+        } = this.query;
+
+        let values = {
+        };
+
+        getList(page.currentPage, page.pageSize, values).then(res => {
+          const data = res.data.data;
+          this.page.total = data.total;
+          this.data = data.records;
+          this.loading = false;
+          this.selectionClear();
+        });
+      }
+    }
+  };
+</script>
+
+<style>
+</style>

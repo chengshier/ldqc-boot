@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.competition.mapper.CompetitionMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="competitionResultMap" type="org.springblade.modules.competition.pojo.entity.CompetitionEntity">
+        <result column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="cover_image" property="coverImage"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="location" property="location"/>
+        <result column="status" property="status"/>
+        <result column="participant_count" property="participantCount"/>
+        <result column="max_participants" property="maxParticipants"/>
+        <result column="price" property="price"/>
+        <result column="description" property="description"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectCompetitionPage" resultMap="competitionResultMap">
+        select * from ldqc_competition where is_deleted = 0
+    </select>
+
+
+    <select id="exportCompetition" resultType="org.springblade.modules.competition.excel.CompetitionExcel">
+        SELECT * FROM ldqc_competition ${ew.customSqlSegment}
+    </select>
+
+</mapper>

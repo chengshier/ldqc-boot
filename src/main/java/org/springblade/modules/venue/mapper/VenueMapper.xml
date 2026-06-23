@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.venue.mapper.VenueMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="venueResultMap" type="org.springblade.modules.venue.pojo.entity.VenueEntity">
+        <result column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="cover_image" property="coverImage"/>
+        <result column="images" property="images"/>
+        <result column="address" property="address"/>
+        <result column="longitude" property="longitude"/>
+        <result column="latitude" property="latitude"/>
+        <result column="rating" property="rating"/>
+        <result column="tags" property="tags"/>
+        <result column="business_hours" property="businessHours"/>
+        <result column="phone" property="phone"/>
+        <result column="description" property="description"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="status" property="status"/>
+    </resultMap>
+
+
+    <select id="selectVenuePage" resultMap="venueResultMap">
+        select * from ldqc_venue where is_deleted = 0
+    </select>
+
+
+    <select id="exportVenue" resultType="org.springblade.modules.venue.excel.VenueExcel">
+        SELECT * FROM ldqc_venue ${ew.customSqlSegment}
+    </select>
+
+</mapper>

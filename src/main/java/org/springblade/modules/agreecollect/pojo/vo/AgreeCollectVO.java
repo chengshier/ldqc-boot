@@ -61,6 +61,15 @@ public class AgreeCollectVO extends AgreeCollectEntity {
 	private String name;
 
 	private Integer count;
+	/**
+	 * 点赞数量
+	 */
+	private Long agreeCount;
+
+	/**
+	 * 评论数量
+	 */
+	private Long commentCount;
 
 	/**
 	 * 图片数量

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.trainingorg.mapper.TrainingOrgMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="trainingOrgResultMap" type="org.springblade.modules.trainingorg.pojo.entity.TrainingOrgEntity">
+        <result column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="cover_image" property="coverImage"/>
+        <result column="address" property="address"/>
+        <result column="longitude" property="longitude"/>
+        <result column="latitude" property="latitude"/>
+        <result column="rating" property="rating"/>
+        <result column="tags" property="tags"/>
+        <result column="business_hours" property="businessHours"/>
+        <result column="phone" property="phone"/>
+        <result column="description" property="description"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="status" property="status"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectTrainingOrgPage" resultMap="trainingOrgResultMap">
+        select *
+        from ldqc_training_org
+        <where>
+            is_deleted = 0
+            <if test="trainingOrg.name != null and trainingOrg.name != ''">
+                and name like concat('%', #{trainingOrg.name}, '%')
+            </if>
+            <if test="trainingOrg.address != null and trainingOrg.address != ''">
+                and address like concat('%', #{trainingOrg.address}, '%')
+            </if>
+            <if test="trainingOrg.tags != null and trainingOrg.tags != ''">
+                and tags like concat('%', #{trainingOrg.tags}, '%')
+            </if>
+            <if test="trainingOrg.businessHours != null and trainingOrg.businessHours != ''">
+                and business_hours = #{trainingOrg.businessHours}
+            </if>
+            <if test="trainingOrg.phone != null and trainingOrg.phone != ''">
+                and phone like concat('%', #{trainingOrg.phone}, '%')
+            </if>
+            <if test="trainingOrg.status != null">
+                and status = #{trainingOrg.status}
+            </if>
+        </where>
+        order by sort_order desc, create_time desc
+    </select>
+
+
+    <select id="exportTrainingOrg" resultType="org.springblade.modules.trainingorg.excel.TrainingOrgExcel">
+        SELECT * FROM ldqc_training_org ${ew.customSqlSegment}
+    </select>
+
+</mapper>

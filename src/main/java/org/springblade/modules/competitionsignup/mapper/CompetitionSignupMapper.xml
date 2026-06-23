@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.competitionsignup.mapper.CompetitionSignupMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="competitionSignupResultMap" type="org.springblade.modules.competitionsignup.pojo.entity.CompetitionSignupEntity">
+        <result column="id" property="id"/>
+        <result column="competition_id" property="competitionId"/>
+        <result column="user_id" property="userId"/>
+        <result column="signup_name" property="signupName"/>
+        <result column="phone" property="phone"/>
+        <result column="id_card" property="idCard"/>
+        <result column="team_name" property="teamName"/>
+        <result column="num_people" property="numPeople"/>
+        <result column="pay_status" property="payStatus"/>
+        <result column="status" property="status"/>
+        <result column="signup_time" property="signupTime"/>
+        <result column="remark" property="remark"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectCompetitionSignupPage" resultMap="competitionSignupResultMap">
+        select * from ldqc_competition_signup where is_deleted = 0
+    </select>
+
+
+    <select id="exportCompetitionSignup" resultType="org.springblade.modules.competitionsignup.excel.CompetitionSignupExcel">
+        SELECT * FROM ldqc_competition_signup ${ew.customSqlSegment}
+    </select>
+
+</mapper>

@@ -14,6 +14,7 @@ import org.springblade.modules.system.service.IAppUserService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @AllArgsConstructor
@@ -41,6 +42,18 @@ public class AppUserController {
         return R.data(appUserService.getUserRecord(uid));
     }
 
+    @GetMapping("/getUserAssets")
+    @Operation(summary = "获取用户资产")
+    public R<Map<String, Object>> getUserAssets(@RequestParam String uid) {
+        return R.data(appUserService.getUserAssets(uid));
+    }
+
+    @GetMapping("/talentHome")
+    @Operation(summary = "获取达人主页")
+    public R<Map<String, Object>> talentHome(@RequestParam long page, @RequestParam long limit, @RequestParam String uid) {
+        return R.data(appUserService.getTalentHome(page, limit, uid));
+    }
+
     @RequestMapping("/getUserInfo")
     @Operation(summary = "获取用户信息")
     public R<User> getUserInfo(@RequestParam String uid) {
@@ -54,7 +67,7 @@ public class AppUserController {
     }
 
     @RequestMapping("/searchUserByUsername")
-    @Operation(summary = "用户名精确查找")
+    @Operation(summary = "用户名精准查询")
     public R<List<FollowVO>> searchUserByUsername(@RequestParam String keyword) {
         return R.data(appUserService.searchUserByUsername(keyword));
     }

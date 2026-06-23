@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.mallexchangeorder.mapper.MallExchangeOrderMapper">
+
+    <select id="selectMallExchangeOrderPage" resultType="org.springblade.modules.mallexchangeorder.pojo.vo.MallExchangeOrderVO">
+        select * from mall_exchange_order where is_deleted = 0
+    </select>
+
+    <select id="exportMallExchangeOrder" resultType="org.springblade.modules.mallexchangeorder.excel.MallExchangeOrderExcel">
+        select * from mall_exchange_order
+    </select>
+
+</mapper>

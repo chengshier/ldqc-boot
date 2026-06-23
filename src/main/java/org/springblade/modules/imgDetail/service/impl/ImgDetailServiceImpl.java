@@ -28,11 +28,15 @@ import org.springblade.modules.imgDetail.excel.ImgDetailExcel;
 import org.springblade.modules.imgDetail.service.IImgDetailService;
 import org.springblade.modules.system.pojo.entity.User;
 import org.springblade.modules.system.service.IUserService;
+import org.springblade.modules.talentpost.pojo.entity.TalentPostEntity;
+import org.springblade.modules.talentpost.service.ITalentPostService;
 import org.springblade.modules.tag.pojo.entity.TagEntity;
 import org.springblade.modules.tag.pojo.vo.TagVO;
 import org.springblade.modules.tag.service.ITagService;
 import org.springblade.modules.tagimgrelation.pojo.entity.TagImgRelationEntity;
 import org.springblade.modules.tagimgrelation.service.ITagImgRelationService;
+import org.springblade.modules.userauthtype.pojo.entity.UserAuthTypeEntity;
+import org.springblade.modules.userauthtype.service.IUserAuthTypeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,6 +81,12 @@ public class ImgDetailServiceImpl extends BaseServiceImpl<ImgDetailMapper, ImgDe
 
     @Autowired
     private PlatformDataToCache platformDataToCache;
+
+    @Autowired
+    private ITalentPostService talentPostService;
+
+    @Autowired
+    private IUserAuthTypeService userAuthTypeService;
 
     @Override
     public IPage<ImgDetailVO> getPage(IPage<ImgDetailVO> page) {
@@ -158,6 +168,7 @@ public class ImgDetailServiceImpl extends BaseServiceImpl<ImgDetailMapper, ImgDe
         User user = userService.getById(imgDetail.getUserId());
         if (user != null) {
             sendMessageMq.sendMessage(PlatformMqConstant.USER_STATE_EXCHANGE, PlatformMqConstant.USER_STATE_KEY, user);
+            syncTalentPostIfNeeded(imgDetail, imgDetailDTO, user);
         }
 
         redisUtils.hPut(PlatformConstant.IMG_DETAIL_LIST_KEY, String.valueOf(imgDetail.getId()), JSON.toJSONString(imgDetail));
@@ -355,5 +366,138 @@ public class ImgDetailServiceImpl extends BaseServiceImpl<ImgDetailMapper, ImgDe
                 vo.setCategoryPName(categoryMap.get(vo.getCategoryPid()).getName());
             }
         }
+    }
+
+    private void syncTalentPostIfNeeded(ImgDetailEntity imgDetail, ImgDetailDTO imgDetailDTO, User user) {
+        if (!isApprovedTalent(user)) {
+            return;
+        }
+
+        TalentPostEntity talentPost = new TalentPostEntity();
+        talentPost.setUserId(imgDetail.getUserId());
+        talentPost.setTitle(resolveTalentPostTitle(imgDetail));
+        talentPost.setContent(imgDetail.getContent());
+        talentPost.setCoverImage(imgDetail.getCover());
+        talentPost.setPosterUrl(resolvePrimaryPosterUrl(imgDetail.getPosterUrl(), imgDetail.getCover()));
+        talentPost.setMediaUrl(resolvePrimaryMediaUrl(imgDetail));
+        talentPost.setMediaType(resolveMediaType(imgDetail.getMediaType(), imgDetail.getImgsUrl()));
+        talentPost.setDuration(imgDetail.getDuration());
+        talentPost.setFileSize(imgDetail.getFileSize());
+        talentPost.setWidth(imgDetail.getWidth());
+        talentPost.setHeight(imgDetail.getHeight());
+        talentPost.setAgreeCount(0);
+        talentPost.setCommentCount(0);
+        talentPost.setShareCount(0);
+        talentPost.setViewCount(0);
+        talentPost.setPostTag(resolveTalentPostTag(imgDetailDTO.getTags()));
+        talentPostService.save(talentPost);
+    }
+
+    private boolean isApprovedTalent(User user) {
+        if (user == null || user.getAuthStatus() == null || user.getAuthStatus() != 2) {
+            return false;
+        }
+
+        UserAuthTypeEntity talentAuthType = findTalentAuthType();
+        if (talentAuthType == null) {
+            return matchesTalentIdentity(user.getMainIdentityCode(), user.getMainIdentityName(), "talent", "达人");
+        }
+
+        return matchesTalentIdentity(user.getMainIdentityCode(), user.getMainIdentityName(), talentAuthType.getCode(), talentAuthType.getName());
+    }
+
+    private UserAuthTypeEntity findTalentAuthType() {
+        List<UserAuthTypeEntity> authTypes = userAuthTypeService.list();
+        if (authTypes == null || authTypes.isEmpty()) {
+            return null;
+        }
+
+        for (UserAuthTypeEntity authType : authTypes) {
+            if (authType == null) {
+                continue;
+            }
+            if (matchesTalentAuthType(authType)) {
+                return authType;
+            }
+        }
+        return null;
+    }
+
+    private boolean matchesTalentAuthType(UserAuthTypeEntity authType) {
+        String code = Func.toStr(authType.getCode()).trim();
+        String name = Func.toStr(authType.getName()).trim();
+        String description = Func.toStr(authType.getDescription()).trim();
+        return "talent".equalsIgnoreCase(code)
+            || "达人".equals(name)
+            || description.contains("达人");
+    }
+
+    private boolean matchesTalentIdentity(String userCode, String userName, String authTypeCode, String authTypeName) {
+        String normalizedUserCode = Func.toStr(userCode).trim();
+        String normalizedUserName = Func.toStr(userName).trim();
+        String normalizedAuthTypeCode = Func.toStr(authTypeCode).trim();
+        String normalizedAuthTypeName = Func.toStr(authTypeName).trim();
+        return (!normalizedAuthTypeCode.isEmpty() && normalizedAuthTypeCode.equalsIgnoreCase(normalizedUserCode))
+            || (!normalizedAuthTypeName.isEmpty() && normalizedAuthTypeName.equals(normalizedUserName));
+    }
+
+    private String resolvePrimaryMediaUrl(ImgDetailEntity imgDetail) {
+        if (imgDetail == null) {
+            return "";
+        }
+        if (imgDetail.getMediaUrl() != null && !imgDetail.getMediaUrl().trim().isEmpty()) {
+            return imgDetail.getMediaUrl().trim();
+        }
+        String imgsUrl = imgDetail.getImgsUrl();
+        if (imgsUrl != null && !imgsUrl.trim().isEmpty()) {
+            try {
+                Object parsed = JSON.parse(imgsUrl);
+                if (parsed instanceof List<?> list && !list.isEmpty() && list.get(0) != null) {
+                    return String.valueOf(list.get(0));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (imgDetail.getCover() != null && !imgDetail.getCover().trim().isEmpty()) {
+            return imgDetail.getCover().trim();
+        }
+        return "";
+    }
+
+    private String resolvePrimaryPosterUrl(String posterUrl, String cover) {
+        if (posterUrl != null && !posterUrl.trim().isEmpty()) {
+            return posterUrl.trim();
+        }
+        return cover;
+    }
+
+    private String resolveMediaType(String mediaType, String imgsUrl) {
+        if (mediaType != null && !mediaType.trim().isEmpty()) {
+            return mediaType.trim();
+        }
+        if (imgsUrl != null && !imgsUrl.trim().isEmpty()) {
+            return "image";
+        }
+        return "image";
+    }
+
+    private String resolveTalentPostTag(List<TagEntity> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return "";
+        }
+        for (TagEntity tag : tags) {
+            if (tag != null && tag.getName() != null && !tag.getName().trim().isEmpty()) {
+                return tag.getName().trim();
+            }
+        }
+        return "";
+    }
+
+    private String resolveTalentPostTitle(ImgDetailEntity imgDetail) {
+        String content = Func.toStr(imgDetail == null ? null : imgDetail.getContent()).trim();
+        if (content.isEmpty()) {
+            return "达人动态";
+        }
+        return content.length() > 30 ? content.substring(0, 30) : content;
     }
 }

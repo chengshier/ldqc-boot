@@ -1,212 +1,231 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.news.controller;
 
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
-import lombok.AllArgsConstructor;
-import jakarta.validation.Valid;
-
-import org.springblade.core.secure.BladeUser;
-import org.springblade.core.secure.annotation.IsAdmin;
-import org.springblade.core.mp.support.Condition;
-import org.springblade.core.mp.support.Query;
-import org.springblade.core.tool.api.R;
-import org.springblade.core.tool.utils.Func;
-import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
+import org.springblade.core.boot.ctrl.BladeController;
+import org.springblade.core.excel.util.ExcelUtil;
+import org.springblade.core.mp.support.Condition;
+import org.springblade.core.mp.support.Query;
+import org.springblade.core.secure.BladeUser;
+import org.springblade.core.secure.annotation.IsAdmin;
+import org.springblade.core.tool.api.R;
+import org.springblade.core.tool.utils.DateUtil;
+import org.springblade.core.tool.utils.Func;
+import org.springblade.modules.news.excel.NewsExcel;
 import org.springblade.modules.news.pojo.entity.NewsEntity;
 import org.springblade.modules.news.pojo.vo.NewsVO;
-import org.springblade.modules.news.excel.NewsExcel;
-import org.springblade.modules.news.wrapper.NewsWrapper;
 import org.springblade.modules.news.service.INewsService;
-import org.springblade.core.boot.ctrl.BladeController;
-import org.springblade.core.tool.utils.DateUtil;
-import org.springblade.core.excel.util.ExcelUtil;
-import org.springblade.core.tool.constant.BladeConstant;
-import java.util.Map;
-import java.util.List;
-import jakarta.servlet.http.HttpServletResponse;
+import org.springblade.modules.news.wrapper.NewsWrapper;
+import org.springblade.modules.newscomment.pojo.entity.NewsCommentEntity;
+import org.springblade.modules.newscomment.service.INewsCommentService;
+import org.springblade.modules.newsimages.pojo.entity.NewsImagesEntity;
+import org.springblade.modules.newsimages.service.INewsImagesService;
+import org.springblade.modules.newsuseraction.pojo.entity.NewsUserActionEntity;
+import org.springblade.modules.newsuseraction.service.INewsUserActionService;
+import org.springframework.web.bind.annotation.*;
 
-/**
- * 新闻表 控制器
- *
- * @author BladeX
- * @since 2026-03-02
- */
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 @RestController
 @AllArgsConstructor
 @RequestMapping("blade-news/news")
-@Tag(name = "新闻表", description = "新闻表接口")
+@Tag(name = "News", description = "News API")
 public class NewsController extends BladeController {
 
-	private final INewsService newsService;
+    private final INewsService newsService;
+    private final INewsImagesService newsImagesService;
+    private final INewsCommentService newsCommentService;
+    private final INewsUserActionService newsUserActionService;
 
-	/**
-	 * 新闻表 详情
-	 */
-	@GetMapping("/detail")
-	@ApiOperationSupport(order = 1)
-	@Operation(summary = "详情", description  = "传入news")
-	public R<NewsVO> detail(NewsEntity news) {
-		NewsEntity detail = newsService.getOne(Condition.getQueryWrapper(news));
-		return R.data(NewsWrapper.build().entityVO(detail));
-	}
-	/**
-	 * 新闻表 分页
-	 */
-	@GetMapping("/list")
-	@ApiOperationSupport(order = 2)
-	@Operation(summary = "分页", description  = "传入news")
-	public R<IPage<NewsVO>> list(@Parameter(hidden = true) @RequestParam Map<String, Object> news, Query query) {
-		IPage<NewsEntity> pages = newsService.page(Condition.getPage(query), Condition.getQueryWrapper(news, NewsEntity.class));
-		return R.data(NewsWrapper.build().pageVO(pages));
-	}
+    @GetMapping("/detail")
+    @ApiOperationSupport(order = 1)
+    @Operation(summary = "Detail", description = "news detail")
+    public R<NewsVO> detail(NewsEntity news) {
+        NewsEntity detail = newsService.getOne(Condition.getQueryWrapper(news));
+        return R.data(NewsWrapper.build().entityVO(detail));
+    }
 
-	/**
-	 * 新闻表 自定义分页
-	 */
-	@GetMapping("/page")
-	@ApiOperationSupport(order = 3)
-	@Operation(summary = "分页", description  = "传入news")
-	public R<IPage<NewsVO>> page(NewsVO news, Query query) {
-		IPage<NewsVO> pages = newsService.selectNewsPage(Condition.getPage(query), news);
-		return R.data(pages);
-	}
+    @GetMapping("/list")
+    @ApiOperationSupport(order = 2)
+    @Operation(summary = "List", description = "news list")
+    public R<IPage<NewsVO>> list(@Parameter(hidden = true) @RequestParam Map<String, Object> news, Query query) {
+        IPage<NewsEntity> pages = newsService.page(Condition.getPage(query), Condition.getQueryWrapper(news, NewsEntity.class));
+        return R.data(NewsWrapper.build().pageVO(pages));
+    }
 
-	/**
-	 * 新闻表 新增
-	 */
-	@PostMapping("/save")
-	@ApiOperationSupport(order = 4)
-	@Operation(summary = "新增", description  = "传入news")
-	public R save(@Valid @RequestBody NewsEntity news) {
-		return R.status(newsService.save(news));
-	}
+    @GetMapping("/page")
+    @ApiOperationSupport(order = 3)
+    @Operation(summary = "Page", description = "news page")
+    public R<IPage<NewsVO>> page(NewsVO news, Query query) {
+        IPage<NewsVO> pages = newsService.selectNewsPage(Condition.getPage(query), news);
+        return R.data(pages);
+    }
 
-	/**
-	 * 新闻表 修改
-	 */
-	@PostMapping("/update")
-	@ApiOperationSupport(order = 5)
-	@Operation(summary = "修改", description  = "传入news")
-	public R update(@Valid @RequestBody NewsEntity news) {
-		return R.status(newsService.updateById(news));
-	}
+    @PostMapping("/save")
+    @ApiOperationSupport(order = 4)
+    @Operation(summary = "Save", description = "save news")
+    public R save(@Valid @RequestBody NewsEntity news) {
+        return R.status(newsService.save(news));
+    }
 
-	/**
-	 * 新闻表 新增或修改
-	 */
-	@PostMapping("/submit")
-	@ApiOperationSupport(order = 6)
-	@Operation(summary = "新增或修改", description  = "传入news")
-	public R submit(@Valid @RequestBody NewsEntity news) {
-		return R.status(newsService.saveOrUpdate(news));
-	}
+    @PostMapping("/update")
+    @ApiOperationSupport(order = 5)
+    @Operation(summary = "Update", description = "update news")
+    public R update(@Valid @RequestBody NewsEntity news) {
+        return R.status(newsService.updateById(news));
+    }
 
-	/**
-	 * 新闻表 删除
-	 */
-	@PostMapping("/remove")
-	@ApiOperationSupport(order = 7)
-	@Operation(summary = "逻辑删除", description  = "传入ids")
-	public R remove(@Parameter(description = "主键集合", required = true) @RequestParam String ids) {
-		return R.status(newsService.deleteLogic(Func.toLongList(ids)));
-	}
+    @PostMapping("/submit")
+    @ApiOperationSupport(order = 6)
+    @Operation(summary = "Submit", description = "save or update news")
+    public R submit(@Valid @RequestBody NewsEntity news) {
+        return R.status(newsService.saveOrUpdate(news));
+    }
 
+    @PostMapping("/remove")
+    @ApiOperationSupport(order = 7)
+    @Operation(summary = "Remove", description = "remove news")
+    public R remove(@Parameter(description = "ids", required = true) @RequestParam String ids) {
+        return R.status(newsService.deleteLogic(Func.toLongList(ids)));
+    }
 
-	/**
-	 * 导出数据
-	 */
-	@IsAdmin
-	@GetMapping("/export-news")
-	@ApiOperationSupport(order = 9)
-	@Operation(summary = "导出数据", description  = "传入news")
-	public void exportNews(@Parameter(hidden = true) @RequestParam Map<String, Object> news, BladeUser bladeUser, HttpServletResponse response) {
-		QueryWrapper<NewsEntity> queryWrapper = Condition.getQueryWrapper(news, NewsEntity.class);
-		//if (!AuthUtil.isAdministrator()) {
-		//	queryWrapper.lambda().eq(News::getTenantId, bladeUser.getTenantId());
-		//}
-		//queryWrapper.lambda().eq(NewsEntity::getIsDeleted, BladeConstant.DB_NOT_DELETED);
-		List<NewsExcel> list = newsService.exportNews(queryWrapper);
-		ExcelUtil.export(response, "新闻表数据" + DateUtil.time(), "新闻表数据表", list, NewsExcel.class);
-	}
+    @IsAdmin
+    @GetMapping("/export-news")
+    @ApiOperationSupport(order = 9)
+    @Operation(summary = "Export", description = "export news")
+    public void exportNews(@Parameter(hidden = true) @RequestParam Map<String, Object> news, BladeUser bladeUser, HttpServletResponse response) {
+        QueryWrapper<NewsEntity> queryWrapper = Condition.getQueryWrapper(news, NewsEntity.class);
+        List<NewsExcel> list = newsService.exportNews(queryWrapper);
+        ExcelUtil.export(response, "news_" + DateUtil.time(), "news", list, NewsExcel.class);
+    }
 
+    @GetMapping("/mobile/page")
+    @ApiOperationSupport(order = 20)
+    @Operation(summary = "Mobile page", description = "mobile news page")
+    public R<IPage<NewsVO>> mobilePage(@RequestParam(defaultValue = "1") Integer current,
+                                       @RequestParam(defaultValue = "10") Integer size,
+                                       @RequestParam(required = false) Long categoryId) {
+        Query query = new Query();
+        query.setCurrent(current);
+        query.setSize(size);
 
-	/**
-	 * ================== 移动端接口 ==================
-	 */
+        NewsVO news = new NewsVO();
+        news.setCategoryId(categoryId);
+        news.setNewsStatus(1);
 
-	/**
-	 * 移动端-分页查询新闻列表
-	 */
-	@GetMapping("/mobile/page")
-	@ApiOperationSupport(order = 1)
-	@Operation(summary = "移动端-分页查询", description = "传入categoryId")
-	public R<IPage<NewsVO>> mobilePage(@RequestParam(defaultValue = "1") Integer current,
-									   @RequestParam(defaultValue = "10") Integer size,
-									   @RequestParam(required = false) Long categoryId) {
-		Query query = new Query();
-		query.setCurrent(current);
-		query.setSize(size);
+        IPage<NewsVO> pages = newsService.selectNewsPage(Condition.getPage(query), news);
+        return R.data(pages);
+    }
 
-		NewsVO news = new NewsVO();
-		news.setCategoryId(categoryId);
-		news.setNewsStatus(1); // 只查询已发布的
+    @GetMapping("/mobile/top")
+    @ApiOperationSupport(order = 21)
+    @Operation(summary = "Mobile top news")
+    public R<NewsEntity> getTopNews() {
+        NewsEntity topNews = newsService.getTopNews();
+        if (topNews != null) {
+            topNews.setImages(getNewsImageUrls(topNews.getId(), topNews.getCover()));
+        }
+        return R.data(topNews);
+    }
 
-		IPage<NewsVO> pages = newsService.selectNewsPage(Condition.getPage(query), news);
-		return R.data(pages);
-	}
+    @GetMapping("/mobile/detail")
+    @ApiOperationSupport(order = 22)
+    @Operation(summary = "Mobile news detail", description = "mobile detail")
+    public R<NewsEntity> getNewsDetail(@RequestParam Long id) {
+        NewsEntity detail = newsService.getNewsDetail(id);
+        if (detail == null) {
+            return R.fail("news not found");
+        }
+        detail.setImages(getNewsImageUrls(detail.getId(), detail.getCover()));
+        return R.data(detail);
+    }
 
-	/**
-	 * 移动端-获取热度新闻TOP1
-	 */
-	@GetMapping("/mobile/top")
-	@ApiOperationSupport(order = 2)
-	@Operation(summary = "移动端-获取热度新闻TOP1")
-	public R<NewsEntity> getTopNews() {
-		return R.data(newsService.getTopNews());
-	}
+    @GetMapping("/mobile/detail-full")
+    @ApiOperationSupport(order = 23)
+    @Operation(summary = "Mobile news aggregate detail", description = "news detail aggregate for mini-program")
+    public R<Map<String, Object>> getNewsDetailFull(@RequestParam Long id,
+                                                    @RequestParam(required = false) Long userId) {
+        NewsEntity detail = newsService.getNewsDetail(id);
+        if (detail == null) {
+            return R.fail("news not found");
+        }
 
-	/**
-	 * 移动端-获取新闻详情
-	 */
-	@GetMapping("/mobile/detail")
-	@ApiOperationSupport(order = 3)
-	@Operation(summary = "移动端-获取新闻详情", description = "传入id")
-	public R<NewsEntity> getNewsDetail(@RequestParam Long id) {
-		NewsEntity detail = newsService.getNewsDetail(id);
-		if (detail == null) {
-			return R.fail("新闻不存在");
-		}
-		return R.data(detail);
-	}
+        List<String> images = getNewsImageUrls(id, detail.getCover());
+        detail.setImages(images);
 
+        List<NewsCommentEntity> comments = newsCommentService.page(
+            new Page<>(1, 20),
+            new QueryWrapper<NewsCommentEntity>()
+                .eq("news_id", id)
+                .eq("comment_status", 1)
+                .eq("is_deleted", 0)
+                .orderByDesc("create_time")
+        ).getRecords();
 
+        List<NewsEntity> related = newsService.page(
+            new Page<>(1, 6),
+            new QueryWrapper<NewsEntity>()
+                .eq("is_deleted", 0)
+                .eq("news_status", 1)
+                .eq(detail.getCategoryId() != null, "category_id", detail.getCategoryId())
+                .ne("id", id)
+                .orderByDesc("is_top")
+                .orderByDesc("publish_time")
+                .orderByDesc("create_time")
+        ).getRecords();
+        related.forEach(item -> item.setImages(getNewsImageUrls(item.getId(), item.getCover())));
+
+        Map<String, Boolean> action = new LinkedHashMap<>();
+        action.put("liked", false);
+        action.put("collected", false);
+        action.put("shared", false);
+        if (userId != null) {
+            List<NewsUserActionEntity> actions = newsUserActionService.list(
+                new QueryWrapper<NewsUserActionEntity>()
+                    .eq("news_id", id)
+                    .eq("user_id", userId)
+                    .eq("is_deleted", 0)
+            );
+            action.put("liked", hasAction(actions, 1));
+            action.put("collected", hasAction(actions, 2));
+            action.put("shared", hasAction(actions, 3));
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("news", detail);
+        result.put("images", images);
+        result.put("comments", comments);
+        result.put("related", related);
+        result.put("action", action);
+        return R.data(result);
+    }
+
+    private boolean hasAction(List<NewsUserActionEntity> actions, int actionType) {
+        return actions != null && actions.stream().anyMatch(item -> item.getActionType() != null && item.getActionType() == actionType);
+    }
+
+    private List<String> getNewsImageUrls(Long newsId, String cover) {
+        List<String> imageUrls = newsImagesService.list(
+            new QueryWrapper<NewsImagesEntity>()
+                .eq("news_id", newsId)
+                .eq("is_deleted", 0)
+                .orderByAsc("sort_order")
+        ).stream().map(NewsImagesEntity::getImageUrl).filter(Func::isNotBlank).collect(Collectors.toList());
+        if (imageUrls.isEmpty() && Func.isNotBlank(cover)) {
+            return Collections.singletonList(cover);
+        }
+        return imageUrls;
+    }
 }

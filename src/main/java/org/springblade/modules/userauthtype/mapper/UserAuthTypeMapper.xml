@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.userauthtype.mapper.UserAuthTypeMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="userAuthTypeResultMap" type="org.springblade.modules.userauthtype.pojo.entity.UserAuthTypeEntity">
+        <result column="id" property="id"/>
+        <result column="code" property="code"/>
+        <result column="name" property="name"/>
+        <result column="icon" property="icon"/>
+        <result column="cover_image" property="coverImage"/>
+        <result column="description" property="description"/>
+        <result column="form_schema" property="formSchema"/>
+        <result column="attachment_schema" property="attachmentSchema"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="status" property="status"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectUserAuthTypePage" resultMap="userAuthTypeResultMap">
+        select * from ldqc_user_auth_type where is_deleted = 0
+    </select>
+
+
+    <select id="exportUserAuthType" resultType="org.springblade.modules.userauthtype.excel.UserAuthTypeExcel">
+        SELECT * FROM ldqc_user_auth_type ${ew.customSqlSegment}
+    </select>
+
+</mapper>

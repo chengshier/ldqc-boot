@@ -101,6 +101,11 @@ public class NewsEntity extends TenantEntity {
 	@Schema(description = "分享数")
 	private Integer shareCount;
 	/**
+	 * 收藏数
+	 */
+	@Schema(description = "分享数")
+	private Integer collectCount;
+	/**
 	 * 分类ID
 	 */
 	@Schema(description = "分类ID")

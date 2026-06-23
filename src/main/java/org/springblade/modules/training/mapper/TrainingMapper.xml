@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.training.mapper.TrainingMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="trainingResultMap" type="org.springblade.modules.training.pojo.entity.TrainingEntity">
+        <result column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="cover_image" property="coverImage"/>
+        <result column="instructor_name" property="instructorName"/>
+        <result column="price" property="price"/>
+        <result column="duration" property="duration"/>
+        <result column="location" property="location"/>
+        <result column="category" property="category"/>
+        <result column="description" property="description"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="status" property="status"/>
+    </resultMap>
+
+
+    <select id="selectTrainingPage" resultMap="trainingResultMap">
+        select *
+        from ldqc_training
+        <where>
+            is_deleted = 0
+            <if test="training.orgId != null">
+                and org_id = #{training.orgId}
+            </if>
+            <if test="training.teacherId != null">
+                and teacher_id = #{training.teacherId}
+            </if>
+            <if test="training.title != null and training.title != ''">
+                and title like concat('%', #{training.title}, '%')
+            </if>
+            <if test="training.instructorName != null and training.instructorName != ''">
+                and instructor_name like concat('%', #{training.instructorName}, '%')
+            </if>
+            <if test="training.courseType != null and training.courseType != ''">
+                and course_type = #{training.courseType}
+            </if>
+            <if test="training.category != null and training.category != ''">
+                and category like concat('%', #{training.category}, '%')
+            </if>
+            <if test="training.location != null and training.location != ''">
+                and location like concat('%', #{training.location}, '%')
+            </if>
+            <if test="training.status != null">
+                and status = #{training.status}
+            </if>
+        </where>
+        order by sort_order desc, create_time desc
+    </select>
+
+
+    <select id="exportTraining" resultType="org.springblade.modules.training.excel.TrainingExcel">
+        SELECT * FROM ldqc_training ${ew.customSqlSegment}
+    </select>
+
+</mapper>

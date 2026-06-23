@@ -226,10 +226,20 @@ public class AgreeCollectController extends BladeController {
 	}
 
 	/**
+	 * 查看是否收藏
+	 */
+	@RequestMapping({"/isCollection", "/isCollectImgToAlbum"})
+	@ApiOperationSupport(order = 7)
+	@Operation(summary = "查看是否收藏", description = "传入agreeCollectDTO")
+	public R<Boolean> isCollection(@RequestBody AgreeCollectDTO agreeCollectDTO) {
+		return R.data(agreeCollectService.isCollection(agreeCollectDTO));
+	}
+
+	/**
 	 * 取消收藏
 	 */
 	@RequestMapping("/cancelCollection")
-	@ApiOperationSupport(order = 7)
+	@ApiOperationSupport(order = 8)
 	@Operation(summary = "取消收藏", description = "传入agreeCollectDTO")
 	public R<Map<String, String>> cancelCollection(@RequestBody AgreeCollectDTO agreeCollectDTO) {
 		return R.data(agreeCollectService.cancelCollection(agreeCollectDTO));

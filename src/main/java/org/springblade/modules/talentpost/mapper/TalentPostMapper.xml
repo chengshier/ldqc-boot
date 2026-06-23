@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.talentpost.mapper.TalentPostMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="talentPostResultMap" type="org.springblade.modules.talentpost.pojo.entity.TalentPostEntity">
+        <result column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="title" property="title"/>
+        <result column="content" property="content"/>
+        <result column="cover_image" property="coverImage"/>
+        <result column="poster_url" property="posterUrl"/>
+        <result column="media_url" property="mediaUrl"/>
+        <result column="media_type" property="mediaType"/>
+        <result column="duration" property="duration"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="width" property="width"/>
+        <result column="height" property="height"/>
+        <result column="agree_count" property="agreeCount"/>
+        <result column="comment_count" property="commentCount"/>
+        <result column="share_count" property="shareCount"/>
+        <result column="view_count" property="viewCount"/>
+        <result column="post_tag" property="postTag"/>
+        <result column="status" property="status"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectTalentPostPage" resultMap="talentPostResultMap">
+        select * from ldqc_talent_post
+        <where>
+            is_deleted = 0
+            <if test="talentPost != null and talentPost.userId != null">
+                and user_id = #{talentPost.userId}
+            </if>
+            <if test="talentPost != null and talentPost.status != null">
+                and status = #{talentPost.status}
+            </if>
+            <if test="talentPost != null and talentPost.postTag != null and talentPost.postTag != ''">
+                and post_tag like concat('%', #{talentPost.postTag}, '%')
+            </if>
+            <if test="talentPost != null and talentPost.title != null and talentPost.title != ''">
+                and title like concat('%', #{talentPost.title}, '%')
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+
+    <select id="exportTalentPost" resultType="org.springblade.modules.talentpost.excel.TalentPostExcel">
+        SELECT * FROM ldqc_talent_post ${ew.customSqlSegment}
+    </select>
+
+</mapper>

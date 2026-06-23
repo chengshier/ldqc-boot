@@ -29,28 +29,45 @@
 
 
     <select id="getAllFollowTrends" resultType="org.springblade.modules.system.pojo.vo.TrendVO">
-        -- 查询当前用户发布的图片详情
         SELECT
             i.id as mid,
-            i.imgs_url,
+            i.status as status,
+            i.update_time as time,
+            i.imgs_url as imgs_url,
+            i.cover as cover,
             i.content,
             i.agree_count,
             i.comment_count,
-            i.update_time as time,
-        a.id as album_id,
-        a.name as album_name,
-        u.id AS user_id,
-        u.name AS username,
-        u.avatar AS avatar,
-        if(ac.uid != '' ,1,0)as is_agree
+            a.id as album_id,
+            a.name as album_name,
+            u.id AS user_id,
+            u.name AS username,
+            u.avatar AS avatar,
+            CASE WHEN EXISTS (
+                SELECT 1
+                FROM t_agree_collect ac
+                WHERE ac.agree_collect_id = i.id
+                  AND ac.type = 1
+                  AND ac.uid = #{uid}
+                  AND ac.is_deleted = 0
+            ) THEN 1 ELSE 0 END AS is_agree
         FROM
             t_img_detail AS i
+            INNER JOIN t_follow AS fu
+                ON fu.fid = i.user_id
+               AND fu.uid = #{uid}
+               AND fu.is_deleted = 0
             LEFT JOIN blade_user AS u ON i.user_id = u.id
-            LEFT JOIN t_album_img_relation as air on i.id = air.mid
-            left join t_album as a on a.id = air.aid
-            left join t_agree_collect as ac on ac.agree_collect_id = i.id and ac.type =1 and ac.uid = #{uid}
+            LEFT JOIN (
+                SELECT air.mid, MIN(air.aid) AS aid
+                FROM t_album_img_relation air
+                WHERE air.is_deleted = 0
+                GROUP BY air.mid
+            ) AS air ON i.id = air.mid
+            LEFT JOIN t_album AS a ON a.id = air.aid AND a.uid = i.user_id AND a.is_deleted = 0
         WHERE
-            (i.user_id in (SELECT fid from t_follow where uid = #{uid} ) or i.user_id = #{uid} )  and a.uid = i.user_id and i.status = 1
+            i.status = 1
+            AND i.is_deleted = 0
         ORDER BY
             i.update_time DESC
             LIMIT ${offset},${limit}

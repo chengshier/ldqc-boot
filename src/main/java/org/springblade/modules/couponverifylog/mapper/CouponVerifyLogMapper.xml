@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.couponverifylog.mapper.CouponVerifyLogMapper">
+
+    <select id="selectCouponVerifyLogPage" resultType="org.springblade.modules.couponverifylog.pojo.vo.CouponVerifyLogVO">
+        select
+            id,
+            user_coupon_id,
+            user_id,
+            merchant_user_id,
+            template_id,
+            coupon_no,
+            verify_channel,
+            verify_result,
+            fail_reason,
+            status,
+            verify_status as verifyStatus,
+            order_no,
+            ext_json,
+            create_time,
+            update_time,
+            create_user,
+            update_user,
+            tenant_id,
+            create_dept,
+            is_deleted
+        from coupon_verify_log
+        where is_deleted = 0
+    </select>
+
+    <select id="exportCouponVerifyLog" resultType="org.springblade.modules.couponverifylog.excel.CouponVerifyLogExcel">
+        select
+            id,
+            user_coupon_id,
+            user_id,
+            merchant_user_id,
+            template_id,
+            coupon_no,
+            verify_channel,
+            verify_result,
+            fail_reason,
+            status,
+            verify_status as verifyStatus,
+            order_no,
+            ext_json,
+            create_time,
+            update_time,
+            create_user,
+            update_user,
+            tenant_id,
+            create_dept,
+            is_deleted
+        from coupon_verify_log
+    </select>
+
+</mapper>
+

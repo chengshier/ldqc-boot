@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.venuespace.mapper.VenueSpaceMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="venueSpaceResultMap" type="org.springblade.modules.venuespace.pojo.entity.VenueSpaceEntity">
+        <result column="id" property="id"/>
+        <result column="venue_id" property="venueId"/>
+        <result column="space_name" property="spaceName"/>
+        <result column="space_type" property="spaceType"/>
+        <result column="price" property="price"/>
+        <result column="capacity" property="capacity"/>
+        <result column="images" property="images"/>
+        <result column="description" property="description"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="status" property="status"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectVenueSpacePage" resultMap="venueSpaceResultMap">
+        select * from ldqc_venue_space where is_deleted = 0
+    </select>
+
+
+    <select id="exportVenueSpace" resultType="org.springblade.modules.venuespace.excel.VenueSpaceExcel">
+        SELECT * FROM ldqc_venue_space ${ew.customSqlSegment}
+    </select>
+
+</mapper>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.userauthapply.mapper.UserAuthApplyMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="userAuthApplyResultMap" type="org.springblade.modules.userauthapply.pojo.entity.UserAuthApplyEntity">
+        <result column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="auth_type_code" property="authTypeCode"/>
+        <result column="auth_type_name" property="authTypeName"/>
+        <result column="form_data" property="formData"/>
+        <result column="apply_status" property="applyStatus"/>
+        <result column="audit_reason" property="auditReason"/>
+        <result column="last_audit_user" property="lastAuditUser"/>
+        <result column="last_audit_time" property="lastAuditTime"/>
+        <result column="approved_time" property="approvedTime"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="tenant_id" property="tenantId"/>
+    </resultMap>
+
+
+    <select id="selectUserAuthApplyPage" resultMap="userAuthApplyResultMap">
+        select * from ldqc_user_auth_apply where is_deleted = 0
+    </select>
+
+
+    <select id="exportUserAuthApply" resultType="org.springblade.modules.userauthapply.excel.UserAuthApplyExcel">
+        SELECT * FROM ldqc_user_auth_apply ${ew.customSqlSegment}
+    </select>
+
+</mapper>

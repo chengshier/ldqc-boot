@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.pointsaccount.mapper.PointsAccountMapper">
+
+    <select id="selectPointsAccountPage" resultType="org.springblade.modules.pointsaccount.pojo.vo.PointsAccountVO">
+        select * from points_account where is_deleted = 0
+    </select>
+
+    <select id="exportPointsAccount" resultType="org.springblade.modules.pointsaccount.excel.PointsAccountExcel">
+        select * from points_account
+    </select>
+
+</mapper>
