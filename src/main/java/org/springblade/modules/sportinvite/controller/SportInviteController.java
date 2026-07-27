@@ -32,11 +32,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 运动邀约表 控制器
+ * 绿动有约控制器。
+ *
+ * 管理端通用增删改查接口通过 {@link IsAdmin} 限制；小程序业务接口由服务层
+ * 根据当前登录用户校验发布人、申请人和审核权限。
  *
  * @author BladeX
  * @since 2026-05-21
@@ -44,22 +48,23 @@ import java.util.Map;
 @RestController
 @AllArgsConstructor
 @RequestMapping("blade-sportinvite/sportInvite")
-@Tag(name = "运动邀约表", description = "运动邀约表接口")
+@Tag(name = "绿动有约", description = "邀约发布、申请、审核及参与信息接口")
 public class SportInviteController extends BladeController {
 
 	private final ISportInviteService sportInviteService;
 
 	@GetMapping("/detail")
 	@ApiOperationSupport(order = 1)
-	@Operation(summary = "详情", description  = "传入sportInvite")
+	@Operation(summary = "详情", description = "兼容历史详情接口；小程序应使用 app-detail")
 	public R<SportInviteVO> detail(SportInviteEntity sportInvite) {
 		SportInviteEntity detail = sportInviteService.getOne(Condition.getQueryWrapper(sportInvite));
 		return R.data(SportInviteWrapper.build().entityVO(detail));
 	}
 
+	@IsAdmin
 	@GetMapping("/list")
 	@ApiOperationSupport(order = 2)
-	@Operation(summary = "分页", description  = "传入sportInvite")
+	@Operation(summary = "管理端分页", description = "运营人员查询邀约数据")
 	public R<IPage<SportInviteVO>> list(@Parameter(hidden = true) @RequestParam Map<String, Object> sportInvite, Query query) {
 		IPage<SportInviteEntity> pages = sportInviteService.page(Condition.getPage(query), Condition.getQueryWrapper(sportInvite, SportInviteEntity.class));
 		return R.data(SportInviteWrapper.build().pageVO(pages));
@@ -67,84 +72,105 @@ public class SportInviteController extends BladeController {
 
 	@GetMapping("/page")
 	@ApiOperationSupport(order = 3)
-	@Operation(summary = "小程序邀约分页", description  = "传入sportInvite")
+	@Operation(summary = "小程序邀约分页", description = "只返回可在小程序展示的邀约")
 	public R<IPage<SportInviteVO>> page(SportInviteEntity sportInvite, Query query) {
 		return R.data(sportInviteService.appPage(Condition.getPage(query), sportInvite));
 	}
 
 	@GetMapping("/app-detail")
 	@ApiOperationSupport(order = 4)
-	@Operation(summary = "小程序邀约详情", description = "传入id")
+	@Operation(summary = "小程序邀约详情", description = "根据当前用户返回申请状态、操作权限和可见联系方式")
 	public R<SportInviteVO> appDetail(@RequestParam Long id) {
 		return R.data(sportInviteService.appDetail(id));
 	}
 
+	@IsAdmin
 	@PostMapping("/save")
 	@ApiOperationSupport(order = 5)
-	@Operation(summary = "新增", description  = "传入sportInvite")
+	@Operation(summary = "管理端新增", description = "运营人员新增邀约")
 	public R save(@Valid @RequestBody SportInviteEntity sportInvite) {
 		return R.status(sportInviteService.save(sportInvite));
 	}
 
+	@IsAdmin
 	@PostMapping("/update")
 	@ApiOperationSupport(order = 6)
-	@Operation(summary = "修改", description  = "传入sportInvite")
+	@Operation(summary = "管理端修改", description = "运营人员修改邀约")
 	public R update(@Valid @RequestBody SportInviteEntity sportInvite) {
 		return R.status(sportInviteService.updateById(sportInvite));
 	}
 
 	@PostMapping("/submit")
 	@ApiOperationSupport(order = 7)
-	@Operation(summary = "发布邀约", description  = "传入sportInvite")
+	@Operation(summary = "发布邀约", description = "小程序用户发布邀约，发布人以后端登录身份为准")
 	public R submit(@Valid @RequestBody SportInviteEntity sportInvite) {
 		return R.status(sportInviteService.publish(sportInvite));
 	}
 
 	@PostMapping("/cancel")
 	@ApiOperationSupport(order = 8)
-	@Operation(summary = "取消邀约", description = "传入id")
-	public R cancel(@RequestParam Long id) {
-		return R.status(sportInviteService.cancel(id));
+	@Operation(summary = "取消邀约", description = "兼容 Query 参数或 JSON Body 传入 id")
+	public R cancel(@RequestParam(required = false) Long id,
+					@RequestBody(required = false) Map<String, Object> body) {
+		Long inviteId = resolveLong(id, body, "id");
+		if (inviteId == null) {
+			return R.fail("缺少邀约ID");
+		}
+		return R.status(sportInviteService.cancel(inviteId));
 	}
 
 	@PostMapping("/apply")
 	@ApiOperationSupport(order = 9)
-	@Operation(summary = "申请加入", description = "传入sportInviteApply")
+	@Operation(summary = "申请加入", description = "申请人以后端登录身份为准")
 	public R apply(@Valid @RequestBody SportInviteApplyEntity apply) {
 		return R.status(sportInviteService.apply(apply));
 	}
 
 	@GetMapping("/myPublish")
 	@ApiOperationSupport(order = 10)
-	@Operation(summary = "我发布的邀约", description = "分页")
+	@Operation(summary = "我发布的邀约", description = "当前用户发布的邀约分页")
 	public R<IPage<SportInviteVO>> myPublish(Query query) {
 		return R.data(sportInviteService.myPublish(Condition.getPage(query)));
 	}
 
 	@GetMapping("/myApply")
 	@ApiOperationSupport(order = 11)
-	@Operation(summary = "我申请的邀约", description = "分页")
+	@Operation(summary = "我申请的邀约", description = "当前用户提交的申请分页")
 	public R<IPage<SportInviteApplyVO>> myApply(Query query) {
 		return R.data(sportInviteService.myApply(Condition.getPage(query)));
 	}
 
 	@GetMapping("/applyList")
 	@ApiOperationSupport(order = 12)
-	@Operation(summary = "申请列表", description = "传入inviteId/applyStatus")
+	@Operation(summary = "申请列表", description = "仅邀约发布人可查看对应申请列表")
 	public R<IPage<SportInviteApplyVO>> applyList(Query query, @RequestParam Long inviteId, String applyStatus) {
 		return R.data(sportInviteService.applyList(Condition.getPage(query), inviteId, applyStatus));
 	}
 
 	@PostMapping("/audit")
 	@ApiOperationSupport(order = 13)
-	@Operation(summary = "审核申请", description = "传入applyId/auditAction/auditRemark")
-	public R audit(@RequestParam Long applyId, @RequestParam String auditAction, String auditRemark) {
-		return R.status(sportInviteService.audit(applyId, auditAction, auditRemark));
+	@Operation(summary = "审核申请", description = "兼容 Query 参数或 JSON Body；仅邀约发布人可操作")
+	public R audit(@RequestParam(required = false) Long applyId,
+				   @RequestParam(required = false) String auditAction,
+				   @RequestParam(required = false) String auditRemark,
+				   @RequestBody(required = false) Map<String, Object> body) {
+		Map<String, Object> safeBody = body == null ? Collections.emptyMap() : body;
+		Long targetApplyId = resolveLong(applyId, safeBody, "applyId");
+		String targetAction = resolveString(auditAction, safeBody, "auditAction");
+		String targetRemark = resolveString(auditRemark, safeBody, "auditRemark");
+		if (targetApplyId == null) {
+			return R.fail("缺少申请ID");
+		}
+		if (targetAction == null || targetAction.trim().isEmpty()) {
+			return R.fail("缺少审核动作");
+		}
+		return R.status(sportInviteService.audit(targetApplyId, targetAction, targetRemark));
 	}
 
+	@IsAdmin
 	@PostMapping("/remove")
 	@ApiOperationSupport(order = 14)
-	@Operation(summary = "逻辑删除", description  = "传入ids")
+	@Operation(summary = "管理端删除", description = "运营人员逻辑删除邀约")
 	public R remove(@Parameter(description = "主键集合", required = true) @RequestParam String ids) {
 		return R.status(sportInviteService.deleteLogic(Func.toLongList(ids)));
 	}
@@ -152,11 +178,36 @@ public class SportInviteController extends BladeController {
 	@IsAdmin
 	@GetMapping("/export-sportInvite")
 	@ApiOperationSupport(order = 15)
-	@Operation(summary = "导出数据", description  = "传入sportInvite")
-	public void exportSportInvite(@Parameter(hidden = true) @RequestParam Map<String, Object> sportInvite, BladeUser bladeUser, HttpServletResponse response) {
+	@Operation(summary = "导出邀约", description = "运营人员按筛选条件导出邀约")
+	public void exportSportInvite(@Parameter(hidden = true) @RequestParam Map<String, Object> sportInvite,
+								  BladeUser bladeUser,
+								  HttpServletResponse response) {
 		QueryWrapper<SportInviteEntity> queryWrapper = Condition.getQueryWrapper(sportInvite, SportInviteEntity.class);
 		List<SportInviteExcel> list = sportInviteService.exportSportInvite(queryWrapper);
-		ExcelUtil.export(response, "运动邀约表数据" + DateUtil.time(), "运动邀约表数据表", list, SportInviteExcel.class);
+		ExcelUtil.export(response, "绿动有约数据" + DateUtil.time(), "绿动有约数据表", list, SportInviteExcel.class);
 	}
 
+	private Long resolveLong(Long queryValue, Map<String, Object> body, String key) {
+		if (queryValue != null) {
+			return queryValue;
+		}
+		if (body == null || body.get(key) == null) {
+			return null;
+		}
+		try {
+			return Long.valueOf(String.valueOf(body.get(key)));
+		} catch (NumberFormatException ignored) {
+			return null;
+		}
+	}
+
+	private String resolveString(String queryValue, Map<String, Object> body, String key) {
+		if (queryValue != null) {
+			return queryValue;
+		}
+		if (body == null || body.get(key) == null) {
+			return null;
+		}
+		return String.valueOf(body.get(key));
+	}
 }
