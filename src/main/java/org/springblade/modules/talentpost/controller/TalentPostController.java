@@ -1,161 +1,128 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.talentpost.controller;
 
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
-import lombok.AllArgsConstructor;
-import jakarta.validation.Valid;
-
-import org.springblade.core.secure.BladeUser;
-import org.springblade.core.secure.annotation.IsAdmin;
-import org.springblade.core.mp.support.Condition;
-import org.springblade.core.mp.support.Query;
-import org.springblade.core.tool.api.R;
-import org.springblade.core.tool.utils.Func;
-import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
+import org.springblade.core.boot.ctrl.BladeController;
+import org.springblade.core.excel.util.ExcelUtil;
+import org.springblade.core.mp.support.Condition;
+import org.springblade.core.mp.support.Query;
+import org.springblade.core.secure.BladeUser;
+import org.springblade.core.secure.annotation.IsAdmin;
+import org.springblade.core.tool.api.R;
+import org.springblade.core.tool.utils.DateUtil;
+import org.springblade.core.tool.utils.Func;
+import org.springblade.modules.talentpost.excel.TalentPostExcel;
 import org.springblade.modules.talentpost.pojo.entity.TalentPostEntity;
 import org.springblade.modules.talentpost.pojo.vo.TalentPostVO;
-import org.springblade.modules.talentpost.excel.TalentPostExcel;
-import org.springblade.modules.talentpost.wrapper.TalentPostWrapper;
 import org.springblade.modules.talentpost.service.ITalentPostService;
-import org.springblade.core.boot.ctrl.BladeController;
-import org.springblade.core.tool.utils.DateUtil;
-import org.springblade.core.excel.util.ExcelUtil;
-import org.springblade.core.tool.constant.BladeConstant;
-import java.util.Map;
-import java.util.List;
-import jakarta.servlet.http.HttpServletResponse;
+import org.springblade.modules.talentpost.wrapper.TalentPostWrapper;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 达人动态表 控制器
- *
- * @author BladeX
- * @since 2026-03-11
- */
+import java.util.List;
+import java.util.Map;
+
+/** 达人教程公开展示和管理端维护接口。 */
 @RestController
 @AllArgsConstructor
 @RequestMapping("blade-talentpost/talentPost")
-@Tag(name = "达人动态表", description = "达人动态表接口")
+@Tag(name = "达人教程", description = "达人教程公开详情与管理端维护接口")
 public class TalentPostController extends BladeController {
 
 	private final ITalentPostService talentPostService;
 
-	/**
-	 * 达人动态表 详情
-	 */
-	@GetMapping("/detail")
+	@GetMapping("/mobile/detail")
 	@ApiOperationSupport(order = 1)
-	@Operation(summary = "详情", description  = "传入talentPost")
+	@Operation(summary = "公开达人教程详情", description = "只返回已发布且未删除的教程")
+	public R<TalentPostVO> mobileDetail(@RequestParam Long id) {
+		TalentPostEntity detail = talentPostService.getOne(Wrappers.<TalentPostEntity>lambdaQuery()
+			.eq(TalentPostEntity::getId, id)
+			.eq(TalentPostEntity::getStatus, 1)
+			.eq(TalentPostEntity::getIsDeleted, 0)
+			.last("limit 1"));
+		if (detail == null) return R.fail("教程不存在或已下架");
+		return R.data(TalentPostWrapper.build().entityVO(detail));
+	}
+
+	@IsAdmin
+	@GetMapping("/detail")
+	@ApiOperationSupport(order = 10)
+	@Operation(summary = "管理端教程详情")
 	public R<TalentPostVO> detail(TalentPostEntity talentPost) {
 		TalentPostEntity detail = talentPostService.getOne(Condition.getQueryWrapper(talentPost));
 		return R.data(TalentPostWrapper.build().entityVO(detail));
 	}
-	/**
-	 * 达人动态表 分页
-	 */
+
+	@IsAdmin
 	@GetMapping("/list")
-	@ApiOperationSupport(order = 2)
-	@Operation(summary = "分页", description  = "传入talentPost")
+	@ApiOperationSupport(order = 11)
+	@Operation(summary = "管理端教程分页")
 	public R<IPage<TalentPostVO>> list(@Parameter(hidden = true) @RequestParam Map<String, Object> talentPost, Query query) {
-		IPage<TalentPostEntity> pages = talentPostService.page(Condition.getPage(query), Condition.getQueryWrapper(talentPost, TalentPostEntity.class));
+		IPage<TalentPostEntity> pages = talentPostService.page(
+			Condition.getPage(query), Condition.getQueryWrapper(talentPost, TalentPostEntity.class));
 		return R.data(TalentPostWrapper.build().pageVO(pages));
 	}
 
-	/**
-	 * 达人动态表 自定义分页
-	 */
+	@IsAdmin
 	@GetMapping("/page")
-	@ApiOperationSupport(order = 3)
-	@Operation(summary = "分页", description  = "传入talentPost")
+	@ApiOperationSupport(order = 12)
+	@Operation(summary = "管理端教程关联分页")
 	public R<IPage<TalentPostVO>> page(TalentPostVO talentPost, Query query) {
-		IPage<TalentPostVO> pages = talentPostService.selectTalentPostPage(Condition.getPage(query), talentPost);
-		return R.data(pages);
+		return R.data(talentPostService.selectTalentPostPage(Condition.getPage(query), talentPost));
 	}
 
-	/**
-	 * 达人动态表 新增
-	 */
+	@IsAdmin
 	@PostMapping("/save")
-	@ApiOperationSupport(order = 4)
-	@Operation(summary = "新增", description  = "传入talentPost")
+	@ApiOperationSupport(order = 13)
+	@Operation(summary = "管理端新增教程")
 	public R save(@Valid @RequestBody TalentPostEntity talentPost) {
 		return R.status(talentPostService.save(talentPost));
 	}
 
-	/**
-	 * 达人动态表 修改
-	 */
+	@IsAdmin
 	@PostMapping("/update")
-	@ApiOperationSupport(order = 5)
-	@Operation(summary = "修改", description  = "传入talentPost")
+	@ApiOperationSupport(order = 14)
+	@Operation(summary = "管理端修改教程")
 	public R update(@Valid @RequestBody TalentPostEntity talentPost) {
 		return R.status(talentPostService.updateById(talentPost));
 	}
 
-	/**
-	 * 达人动态表 新增或修改
-	 */
+	@IsAdmin
 	@PostMapping("/submit")
-	@ApiOperationSupport(order = 6)
-	@Operation(summary = "新增或修改", description  = "传入talentPost")
+	@ApiOperationSupport(order = 15)
+	@Operation(summary = "管理端保存教程")
 	public R submit(@Valid @RequestBody TalentPostEntity talentPost) {
 		return R.status(talentPostService.saveOrUpdate(talentPost));
 	}
 
-	/**
-	 * 达人动态表 删除
-	 */
+	@IsAdmin
 	@PostMapping("/remove")
-	@ApiOperationSupport(order = 7)
-	@Operation(summary = "逻辑删除", description  = "传入ids")
-	public R remove(@Parameter(description = "主键集合", required = true) @RequestParam String ids) {
+	@ApiOperationSupport(order = 16)
+	@Operation(summary = "管理端删除教程")
+	public R remove(@RequestParam String ids) {
 		return R.status(talentPostService.deleteLogic(Func.toLongList(ids)));
 	}
 
-
-	/**
-	 * 导出数据
-	 */
 	@IsAdmin
 	@GetMapping("/export-talentPost")
-	@ApiOperationSupport(order = 9)
-	@Operation(summary = "导出数据", description  = "传入talentPost")
-	public void exportTalentPost(@Parameter(hidden = true) @RequestParam Map<String, Object> talentPost, BladeUser bladeUser, HttpServletResponse response) {
+	@ApiOperationSupport(order = 17)
+	@Operation(summary = "导出达人教程")
+	public void exportTalentPost(@Parameter(hidden = true) @RequestParam Map<String, Object> talentPost,
+		BladeUser bladeUser, HttpServletResponse response) {
 		QueryWrapper<TalentPostEntity> queryWrapper = Condition.getQueryWrapper(talentPost, TalentPostEntity.class);
-		//if (!AuthUtil.isAdministrator()) {
-		//	queryWrapper.lambda().eq(TalentPost::getTenantId, bladeUser.getTenantId());
-		//}
-		//queryWrapper.lambda().eq(TalentPostEntity::getIsDeleted, BladeConstant.DB_NOT_DELETED);
 		List<TalentPostExcel> list = talentPostService.exportTalentPost(queryWrapper);
-		ExcelUtil.export(response, "达人动态表数据" + DateUtil.time(), "达人动态表数据表", list, TalentPostExcel.class);
+		ExcelUtil.export(response, "达人教程" + DateUtil.time(), "达人教程", list, TalentPostExcel.class);
 	}
-
 }
