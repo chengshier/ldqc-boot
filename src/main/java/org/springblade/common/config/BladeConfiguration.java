@@ -40,27 +40,23 @@ public class BladeConfiguration implements WebMvcConfigurer {
 				"/webjars/**",
 				"/swagger-resources/**",
 				"/druid/**",
-				// 社区公开内容只开放业务查询，不放行管理端分页。
 				"/blade-imgDetail/imgDetail/getHot",
 				"/blade-imgDetail/imgDetail/getOne",
 				"/blade-recommend/recommendToUserByCF",
 				"/blade-recommend/home-feed",
 				"/blade-category/category/getTreeCategory",
-				// 培训课程目录和试看播放可匿名访问；正式课时仍由服务层校验授权。
 				"/blade-training/training/mobile-page",
 				"/blade-training/training/mobile-detail",
 				"/blade-training/training/lesson-play-token",
 				"/blade-training/training/video-play",
-				// 赛事公开列表和详情；报名订单必须登录。
 				"/blade-competition/competition/mobile/page",
 				"/blade-competition/competition/mobile/detail",
-				// 商城公开商品浏览；兑换确认和订单必须登录。
 				"/blade-mallproduct/mallProduct/mobile/page",
 				"/blade-mallproduct/mallProduct/mobile/detail",
-				// 认证达人公开列表、主页和内容。
 				"/blade-system/talent/mobile/page",
 				"/blade-system/talent/mobile/profile",
-				"/blade-system/talent/mobile/content"
+				"/blade-system/talent/mobile/content",
+				"/blade-talentpost/talentPost/mobile/detail"
 			)
 			.authEnabled()
 			.addAuthPattern(HttpMethod.ALL, "/blade-chat/message/**", "hasAuth()")
