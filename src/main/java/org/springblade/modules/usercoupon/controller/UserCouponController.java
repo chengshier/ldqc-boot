@@ -1,308 +1,193 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.usercoupon.controller;
 
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
-import lombok.AllArgsConstructor;
-import jakarta.validation.Valid;
-
-import org.springblade.core.secure.BladeUser;
-import org.springblade.core.secure.annotation.IsAdmin;
-import org.springblade.core.mp.support.Condition;
-import org.springblade.core.mp.support.Query;
-import org.springblade.core.tool.api.R;
-import org.springblade.core.tool.utils.Func;
-import org.springblade.core.secure.utils.AuthUtil;
-import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
+import org.springblade.core.boot.ctrl.BladeController;
+import org.springblade.core.excel.util.ExcelUtil;
+import org.springblade.core.mp.support.Condition;
+import org.springblade.core.mp.support.Query;
+import org.springblade.core.secure.BladeUser;
+import org.springblade.core.secure.annotation.IsAdmin;
+import org.springblade.core.secure.utils.AuthUtil;
+import org.springblade.core.tool.api.R;
+import org.springblade.core.tool.utils.DateUtil;
+import org.springblade.core.tool.utils.Func;
+import org.springblade.modules.usercoupon.excel.UserCouponExcel;
+import org.springblade.modules.usercoupon.pojo.dto.UserCouponVerifyConfirmRequest;
 import org.springblade.modules.usercoupon.pojo.entity.UserCouponEntity;
 import org.springblade.modules.usercoupon.pojo.vo.UserCouponVO;
-import org.springblade.modules.usercoupon.excel.UserCouponExcel;
-import org.springblade.modules.usercoupon.wrapper.UserCouponWrapper;
+import org.springblade.modules.usercoupon.service.CouponVerificationService;
 import org.springblade.modules.usercoupon.service.IUserCouponService;
-import org.springblade.modules.coupontemplate.pojo.entity.CouponTemplateEntity;
-import org.springblade.modules.coupontemplate.service.ICouponTemplateService;
-import org.springblade.modules.couponverifylog.pojo.entity.CouponVerifyLogEntity;
-import org.springblade.modules.couponverifylog.service.ICouponVerifyLogService;
-import org.springblade.common.utils.RedisUtils;
-import org.springblade.core.boot.ctrl.BladeController;
-import org.springblade.core.tool.utils.DateUtil;
-import org.springblade.core.excel.util.ExcelUtil;
-import org.springblade.core.tool.constant.BladeConstant;
-import java.util.Map;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import java.util.List;
-import java.util.HashMap;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import org.springframework.jdbc.core.JdbcTemplate;
-import jakarta.servlet.http.HttpServletResponse;
+import java.util.Map;
 
 /**
- * 用户优惠券 控制器
+ * 用户优惠券控制器。
  *
- * @author BladeX
- * @since 2026-04-02
+ * <p>用户端只允许查看自己的券；管理端通用维护接口全部限制为管理员；
+ * 二维码核销统一委托 {@link CouponVerificationService}，不再保留旧的直接核销旁路。</p>
  */
 @RestController
 @AllArgsConstructor
 @RequestMapping("blade-usercoupon/userCoupon")
-@Tag(name = "用户优惠券", description = "用户优惠券接口")
+@Tag(name = "用户优惠券", description = "用户券查询、动态二维码与安全核销接口")
 public class UserCouponController extends BladeController {
 
 	private final IUserCouponService userCouponService;
-	private final ICouponTemplateService couponTemplateService;
-	private final ICouponVerifyLogService couponVerifyLogService;
-	private final RedisUtils redisUtils;
-	private final JdbcTemplate jdbcTemplate;
+	private final CouponVerificationService couponVerificationService;
 
-	/**
-	 * 用户优惠券 详情
-	 */
 	@GetMapping("/detail")
 	@ApiOperationSupport(order = 1)
-	@Operation(summary = "详情", description  = "传入userCoupon")
-	public R<UserCouponVO> detail(UserCouponEntity userCoupon) {
-		UserCouponEntity detail = userCouponService.getById(userCoupon.getId());
-		if (detail == null || !AuthUtil.getUserId().equals(detail.getUserId())) return R.fail("无权查看该优惠券");
-		return R.data(toUserCouponVO(detail));
+	@Operation(summary = "优惠券详情", description = "用户只能查看自己的优惠券，管理员可用于运营查询")
+	public R<UserCouponVO> detail(@RequestParam Long id) {
+		UserCouponEntity coupon = userCouponService.getById(id);
+		if (coupon == null || Func.equals(coupon.getIsDeleted(), 1)) {
+			return R.fail("优惠券不存在");
+		}
+		if (!AuthUtil.isAdministrator() && !AuthUtil.getUserId().equals(coupon.getUserId())) {
+			return R.fail("无权查看该优惠券");
+		}
+		return R.data(userCouponService.buildCouponDetail(id));
 	}
-	/**
-	 * 用户优惠券 分页
-	 */
+
 	@GetMapping("/list")
 	@ApiOperationSupport(order = 2)
-	@Operation(summary = "分页", description  = "传入userCoupon")
+	@Operation(summary = "我的优惠券", description = "按状态等条件查询当前用户自己的优惠券")
 	public R<IPage<UserCouponVO>> list(@Parameter(hidden = true) @RequestParam Map<String, Object> userCoupon, Query query) {
 		userCoupon.put("userId", AuthUtil.getUserId());
-		IPage<UserCouponEntity> pages = userCouponService.page(Condition.getPage(query), Condition.getQueryWrapper(userCoupon, UserCouponEntity.class));
-		return R.data(pages.convert(this::toUserCouponVO));
+		IPage<UserCouponEntity> entityPage = userCouponService.page(
+			Condition.getPage(query),
+			Condition.getQueryWrapper(userCoupon, UserCouponEntity.class)
+		);
+		IPage<UserCouponVO> result = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
+		result.setRecords(userCouponService.buildCouponList(entityPage.getRecords()));
+		return R.data(result);
 	}
 
-	/**
-	 * 用户优惠券 自定义分页
-	 */
+	@IsAdmin
 	@GetMapping("/page")
 	@ApiOperationSupport(order = 3)
-	@Operation(summary = "分页", description  = "传入userCoupon")
+	@Operation(summary = "管理端优惠券分页", description = "运营人员按用户、模板和状态查询用户券")
 	public R<IPage<UserCouponVO>> page(UserCouponVO userCoupon, Query query) {
-		IPage<UserCouponVO> pages = userCouponService.selectUserCouponPage(Condition.getPage(query), userCoupon);
-		return R.data(pages);
+		return R.data(userCouponService.selectUserCouponPage(Condition.getPage(query), userCoupon));
 	}
 
-	/**
-	 * 用户优惠券 新增
-	 */
+	@IsAdmin
 	@PostMapping("/save")
 	@ApiOperationSupport(order = 4)
-	@Operation(summary = "新增", description  = "传入userCoupon")
+	@Operation(summary = "管理端发放优惠券", description = "运营人员人工发放用户券")
 	public R save(@Valid @RequestBody UserCouponEntity userCoupon) {
 		return R.status(userCouponService.save(userCoupon));
 	}
 
-	/**
-	 * 用户优惠券 修改
-	 */
+	@IsAdmin
 	@PostMapping("/update")
 	@ApiOperationSupport(order = 5)
-	@Operation(summary = "修改", description  = "传入userCoupon")
+	@Operation(summary = "管理端修改优惠券", description = "仅用于运营纠错，不应代替领取和核销流程")
 	public R update(@Valid @RequestBody UserCouponEntity userCoupon) {
 		return R.status(userCouponService.updateById(userCoupon));
 	}
 
-	/**
-	 * 用户优惠券 新增或修改
-	 */
+	@IsAdmin
 	@PostMapping("/submit")
 	@ApiOperationSupport(order = 6)
-	@Operation(summary = "新增或修改", description  = "传入userCoupon")
+	@Operation(summary = "管理端保存优惠券", description = "运营人员新增或修改用户券")
 	public R submit(@Valid @RequestBody UserCouponEntity userCoupon) {
 		return R.status(userCouponService.saveOrUpdate(userCoupon));
 	}
 
-	/**
-	 * 用户优惠券 删除
-	 */
+	@IsAdmin
 	@PostMapping("/remove")
 	@ApiOperationSupport(order = 7)
-	@Operation(summary = "逻辑删除", description  = "传入ids")
+	@Operation(summary = "管理端删除优惠券", description = "逻辑删除异常用户券")
 	public R remove(@Parameter(description = "主键集合", required = true) @RequestParam String ids) {
 		return R.status(userCouponService.deleteLogic(Func.toLongList(ids)));
 	}
 
-
-	/**
-	 * 导出数据
-	 */
 	@IsAdmin
 	@GetMapping("/export-userCoupon")
-	@ApiOperationSupport(order = 9)
-	@Operation(summary = "导出数据", description  = "传入userCoupon")
-	public void exportUserCoupon(@Parameter(hidden = true) @RequestParam Map<String, Object> userCoupon, BladeUser bladeUser, HttpServletResponse response) {
+	@ApiOperationSupport(order = 8)
+	@Operation(summary = "导出用户优惠券", description = "按当前筛选条件导出用户券")
+	public void exportUserCoupon(@Parameter(hidden = true) @RequestParam Map<String, Object> userCoupon,
+								 BladeUser bladeUser,
+								 HttpServletResponse response) {
 		QueryWrapper<UserCouponEntity> queryWrapper = Condition.getQueryWrapper(userCoupon, UserCouponEntity.class);
-		//if (!AuthUtil.isAdministrator()) {
-		//	queryWrapper.lambda().eq(UserCoupon::getTenantId, bladeUser.getTenantId());
-		//}
-		//queryWrapper.lambda().eq(UserCouponEntity::getIsDeleted, BladeConstant.DB_NOT_DELETED);
 		List<UserCouponExcel> list = userCouponService.exportUserCoupon(queryWrapper);
 		ExcelUtil.export(response, "用户优惠券数据" + DateUtil.time(), "用户优惠券数据表", list, UserCouponExcel.class);
 	}
 
-	@PostMapping("/use")
-	@ApiOperationSupport(order = 10)
-	@Operation(summary = "核销优惠券", description  = "传入couponNo、orderNo")
-	public R<String> useCoupon(@RequestParam String couponNo, @RequestParam(required = false) String orderNo) {
-		Long merchantUserId = AuthUtil.getUserId();
-		String result = userCouponService.useCoupon(couponNo, orderNo, merchantUserId);
-		return "核销成功".equals(result) ? R.data(result) : R.fail(result);
-	}
-
+	@IsAdmin
 	@PostMapping("/release")
-	@ApiOperationSupport(order = 11)
-	@Operation(summary = "释放锁券", description  = "传入couponNo")
+	@ApiOperationSupport(order = 9)
+	@Operation(summary = "释放锁券", description = "仅用于处理异常锁券，正常核销流程不得调用")
 	public R<String> releaseCoupon(@RequestParam String couponNo) {
 		String result = userCouponService.releaseCoupon(couponNo);
 		return "释放成功".equals(result) ? R.data(result) : R.fail(result);
 	}
 
 	@GetMapping("/qrcode-token")
-	@Operation(summary = "生成优惠券动态二维码")
+	@ApiOperationSupport(order = 10)
+	@Operation(summary = "生成动态二维码", description = "为当前用户自己的可用优惠券生成短时动态令牌")
 	public R<Map<String, Object>> qrCodeToken(@RequestParam Long userCouponId) {
-		UserCouponEntity coupon = userCouponService.getById(userCouponId);
-		if (coupon == null || !AuthUtil.getUserId().equals(coupon.getUserId())) return R.fail("无权操作该优惠券");
-		if (!isUsable(coupon)) return R.fail("当前券不可核销");
-		String token = UUID.randomUUID().toString().replace("-", "");
-		redisUtils.set("coupon:qr:" + token, String.valueOf(coupon.getId()), 90);
-		Map<String, Object> result = new HashMap<>();
-		result.put("qrToken", token); result.put("expiresIn", 90); result.put("refreshInSeconds", 60);
-		return R.data(result);
+		try {
+			return R.data(couponVerificationService.createQrToken(userCouponId, AuthUtil.getUserId()));
+		} catch (IllegalArgumentException | IllegalStateException exception) {
+			return R.fail(exception.getMessage());
+		}
 	}
 
 	@GetMapping("/verify-permission")
-	@Operation(summary = "核销权限")
+	@ApiOperationSupport(order = 11)
+	@Operation(summary = "获取核销权限", description = "返回当前账号可核销的真实业务范围")
 	public R<Map<String, Object>> verifyPermission() {
-		Map<String, Object> result = new HashMap<>();
-		result.put("canVerify", hasVerifierScope()); result.put("venueName", hasVerifierScope() ? "已授权核销场馆" : "");
-		return R.data(result);
+		return R.data(couponVerificationService.getVerifierPermission(AuthUtil.getUserId()));
 	}
 
 	@PostMapping("/verify-scan")
-	@Operation(summary = "扫描优惠券二维码")
-	public R<Map<String, Object>> verifyScan(@RequestBody Map<String, String> body) {
-		if (!hasVerifierScope()) return R.fail("当前账号暂无核销权限");
-		Object value = redisUtils.get("coupon:qr:" + body.get("qrToken"));
-		if (value == null) return R.fail("二维码已失效，请让用户刷新后重试");
-		UserCouponEntity coupon = userCouponService.getById(Long.valueOf(String.valueOf(value)));
-		if (coupon == null || !canVerifyCoupon(coupon)) return R.fail("该优惠券不可在当前场馆核销");
-		redisUtils.set("coupon:verify-session:" + AuthUtil.getUserId() + ":" + coupon.getId(), "1", 300);
-		CouponTemplateEntity template = couponTemplateService.getById(coupon.getCouponTemplateId());
-		Map<String, Object> result = new HashMap<>();
-		result.put("userCouponId", coupon.getId()); result.put("couponNo", coupon.getCouponNo());
-		result.put("couponTemplateId", coupon.getCouponTemplateId()); result.put("couponName", template == null ? "优惠券" : template.getCouponName());
-		result.put("couponType", template == null ? "CASH" : template.getCouponType()); result.put("status", coupon.getCouponStatus());
-		result.put("remainDurationMinutes", coupon.getRemainDurationMinutes()); result.put("remainTimes", coupon.getRemainTimes());
-		result.put("validStartAt", coupon.getValidStartAt()); result.put("validEndAt", coupon.getValidEndAt());
-		result.put("verifyRecords", couponVerifyLogService.list(Condition.getQueryWrapper(new CouponVerifyLogEntity()).eq("user_coupon_id", coupon.getId())));
-		return R.data(result);
+	@ApiOperationSupport(order = 12)
+	@Operation(summary = "扫描优惠券二维码", description = "校验动态令牌、券状态和当前核销员授权范围")
+	public R<UserCouponVO> verifyScan(@RequestBody Map<String, String> body) {
+		try {
+			return R.data(couponVerificationService.scan(body.get("qrToken"), AuthUtil.getUserId()));
+		} catch (IllegalArgumentException exception) {
+			return R.fail(exception.getMessage());
+		}
 	}
 
 	@PostMapping("/verify-confirm")
-	@Operation(summary = "确认核销优惠券")
-	public R<Map<String, Object>> verifyConfirm(@RequestBody Map<String, Object> body) {
-		if (!hasVerifierScope()) return R.fail("当前账号暂无核销权限");
-		Long couponId = Long.valueOf(String.valueOf(body.get("userCouponId")));
-		String sessionKey = "coupon:verify-session:" + AuthUtil.getUserId() + ":" + couponId;
-		if (redisUtils.get(sessionKey) == null) return R.fail("请重新扫码后再核销");
-		Boolean locked = redisUtils.getRedisTemplate().opsForValue().setIfAbsent("coupon:verify-lock:" + couponId, "1", 30, TimeUnit.SECONDS);
-		if (!Boolean.TRUE.equals(locked)) return R.fail("该优惠券正在核销，请勿重复提交");
+	@ApiOperationSupport(order = 13)
+	@Operation(summary = "确认核销优惠券", description = "核销前必须完成扫码预检，支持整张或部分核销")
+	public R<Map<String, Object>> verifyConfirm(@Valid @RequestBody UserCouponVerifyConfirmRequest request) {
 		try {
-			UserCouponEntity coupon = userCouponService.getById(couponId);
-			if (coupon == null || !canVerifyCoupon(coupon)) return R.fail("该优惠券不可在当前场馆核销");
-			boolean full = "FULL".equalsIgnoreCase(String.valueOf(body.get("verifyMode")));
-			String message = userCouponService.useCouponById(couponId, null, AuthUtil.getUserId(), full, toInt(body.get("consumeDurationMinutes")), toInt(body.get("consumeTimes")));
-			if (!"核销成功".equals(message)) return R.fail(message);
-			redisUtils.delete(sessionKey);
-			Map<String, Object> result = new HashMap<>(); result.put("success", true); result.put("message", message); result.put("userCouponId", couponId);
-			return R.data(result);
-		} finally { redisUtils.delete("coupon:verify-lock:" + couponId); }
+			return R.data(couponVerificationService.confirm(request, AuthUtil.getUserId()));
+		} catch (IllegalArgumentException exception) {
+			return R.fail(exception.getMessage());
+		}
 	}
 
 	@GetMapping("/verify-records")
-	@Operation(summary = "获取我的优惠券核销记录")
-	public R<List<CouponVerifyLogEntity>> verifyRecords(@RequestParam Long userCouponId) {
-		UserCouponEntity coupon = userCouponService.getById(userCouponId);
-		if (coupon == null || !AuthUtil.getUserId().equals(coupon.getUserId())) return R.fail("无权查看核销记录");
-		return R.data(couponVerifyLogService.list(Condition.getQueryWrapper(new CouponVerifyLogEntity()).eq("user_coupon_id", userCouponId)));
+	@ApiOperationSupport(order = 14)
+	@Operation(summary = "优惠券核销记录", description = "用户只能查看自己的优惠券核销记录")
+	public R<List<Map<String, Object>>> verifyRecords(@RequestParam Long userCouponId) {
+		try {
+			return R.data(couponVerificationService.getOwnerVerifyRecords(userCouponId, AuthUtil.getUserId()));
+		} catch (IllegalArgumentException exception) {
+			return R.fail(exception.getMessage());
+		}
 	}
-
-	private boolean hasVerifierScope() {
-		Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM coupon_verifier_scope WHERE verifier_user_id = ? AND status = 1 AND is_deleted = 0", Integer.class, AuthUtil.getUserId());
-		return count != null && count > 0;
-	}
-
-	private boolean canVerifyCoupon(UserCouponEntity coupon) {
-		if (!isUsable(coupon)) return false;
-		CouponTemplateEntity template = couponTemplateService.getById(coupon.getCouponTemplateId());
-		if (template == null) return false;
-		Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM coupon_verifier_scope WHERE verifier_user_id = ? AND status = 1 AND is_deleted = 0 AND ((scope_type = 'ALL' AND scope_ref_id = 'ALL') OR (scope_type = ? AND scope_ref_id = ?))", Integer.class, AuthUtil.getUserId(), template.getScopeType(), template.getScopeRefId());
-		return count != null && count > 0;
-	}
-
-	private boolean isUsable(UserCouponEntity coupon) {
-		return ("UNUSED".equalsIgnoreCase(coupon.getCouponStatus()) || "PARTIAL_USED".equalsIgnoreCase(coupon.getCouponStatus())) && (coupon.getValidEndAt() == null || !coupon.getValidEndAt().before(new java.util.Date()));
-	}
-
-	private UserCouponVO toUserCouponVO(UserCouponEntity coupon) {
-		UserCouponVO vo = UserCouponWrapper.build().entityVO(coupon);
-		CouponTemplateEntity template = couponTemplateService.getById(coupon.getCouponTemplateId());
-		if (template == null) return vo;
-		vo.setCouponName(template.getCouponName());
-		vo.setCouponType(template.getCouponType());
-		vo.setScopeType(template.getScopeType());
-		vo.setScopeRefId(template.getScopeRefId());
-		vo.setValidType(template.getValidType());
-		vo.setAcquireType(template.getAcquireType());
-		vo.setExtJson(template.getExtJson());
-		vo.setThresholdAmount(template.getThresholdAmount());
-		vo.setDiscountAmount(template.getDiscountAmount());
-		vo.setDurationMinutes(template.getDurationMinutes());
-		vo.setTotalTimes(template.getTotalTimes());
-		vo.setCostPoints(template.getCostPoints());
-		vo.setMinGrowthLevel(template.getMinGrowthLevel());
-		vo.setTemplateValidStartAt(template.getValidStartAt());
-		vo.setTemplateValidEndAt(template.getValidEndAt());
-		vo.setValidDays(template.getValidDays());
-		return vo;
-	}
-
-	private int toInt(Object value) { try { return value == null ? 0 : Integer.parseInt(String.valueOf(value)); } catch (Exception ignored) { return 0; } }
-
 }
-
-
