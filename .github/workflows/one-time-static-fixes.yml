@@ -1,0 +1,43 @@
+name: One-time backend static fixes
+
+on:
+  push:
+    branches:
+      - refactor/market-ready-phase1
+    paths:
+      - .github/workflows/one-time-static-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+          fetch-depth: 0
+      - name: Apply safe compatibility patches
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/main/java/org/springblade/modules/training/service/TrainingCourseAdminService.java')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'return org.springblade.core.tool.utils.DateUtil.parse(String.valueOf(value), "yyyy-MM-dd HH:mm:ss");',
+              'return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(String.valueOf(value));'
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/one-time-static-fixes.yml
+          git add src/main/java/org/springblade/modules/training/service/TrainingCourseAdminService.java
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix: harden training date parsing compatibility"
+          git push origin HEAD:refactor/market-ready-phase1
