@@ -25,6 +25,7 @@ import org.springblade.modules.imgDetail.pojo.dto.ImgDetailDTO;
 import org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity;
 import org.springblade.modules.imgDetail.pojo.vo.ImgDetailVO;
 import org.springblade.modules.imgDetail.service.ContentPublishWorkflowService;
+import org.springblade.modules.imgDetail.service.ContentResubmitService;
 import org.springblade.modules.imgDetail.service.IImgDetailService;
 import org.springblade.modules.imgDetail.wrapper.ImgDetailWrapper;
 import org.springblade.modules.mediaUtil.VideoCoverGenerateTool;
@@ -43,7 +44,7 @@ import static io.jsonwebtoken.lang.Strings.hasText;
 /**
  * 社区图文与短视频内容控制器。
  *
- * <p>用户发布、查询自己的审核状态和删除自己的内容使用小程序业务接口；
+ * <p>用户发布、修改重提、查询自己的审核状态和删除自己的内容使用小程序业务接口；
  * 通用 CRUD、审核、下架和导出仅供管理端运营人员使用。</p>
  */
 @RestController
@@ -54,6 +55,7 @@ public class ImgDetailController extends BladeController {
 
 	private final IImgDetailService imgDetailService;
 	private final ContentPublishWorkflowService contentWorkflowService;
+	private final ContentResubmitService contentResubmitService;
 	private final VideoCoverGenerateTool videoCoverGenerateTool;
 
 	@IsAdmin
@@ -163,11 +165,22 @@ public class ImgDetailController extends BladeController {
 		if (content != null && shouldGenerateVideoPoster(content)) {
 			videoCoverGenerateTool.generateCoverAsync(content);
 		}
-		return R.data(id, "发布成功，内容审核通过后将公开展示");
+		return R.data(id);
+	}
+
+	@PostMapping("/resubmit")
+	@ApiOperationSupport(order = 12)
+	@Operation(summary = "修改后重新提交", description = "仅作者可以修改审核拒绝或已下架的内容并重新进入审核")
+	public R<Long> resubmit(@RequestBody ImgDetailDTO request) {
+		ImgDetailEntity content = contentResubmitService.resubmit(request, AuthUtil.getUserId());
+		if (shouldGenerateVideoPoster(content)) {
+			videoCoverGenerateTool.generateCoverAsync(content);
+		}
+		return R.data(content.getId());
 	}
 
 	@PostMapping("/deleteImgs")
-	@ApiOperationSupport(order = 12)
+	@ApiOperationSupport(order = 13)
 	@Operation(summary = "删除我的内容", description = "用户只能删除自己发布的内容，用户ID以后端登录态为准")
 	public R deleteImgs(@RequestParam String ids) {
 		contentWorkflowService.deleteOwned(Func.toLongList(ids), AuthUtil.getUserId());
@@ -175,7 +188,7 @@ public class ImgDetailController extends BladeController {
 	}
 
 	@GetMapping("/my-page")
-	@ApiOperationSupport(order = 13)
+	@ApiOperationSupport(order = 14)
 	@Operation(summary = "我的发布", description = "查看当前用户待审核、已发布、被拒绝和已下架内容")
 	public R<IPage<ImgDetailVO>> myPage(@RequestParam(required = false) Integer status, Query query) {
 		IPage<ImgDetailEntity> page = imgDetailService.page(Condition.getPage(query),
@@ -188,7 +201,7 @@ public class ImgDetailController extends BladeController {
 	}
 
 	@GetMapping("/getHot")
-	@ApiOperationSupport(order = 14)
+	@ApiOperationSupport(order = 15)
 	@Operation(summary = "热门内容", description = "只返回审核通过且已发布的内容")
 	public R<IPage<ImgDetailVO>> getHot(Query query) {
 		IPage<ImgDetailEntity> page = imgDetailService.page(Condition.getPage(query),
@@ -202,7 +215,7 @@ public class ImgDetailController extends BladeController {
 
 	/** 历史相册接口暂保留兼容，不再作为新发布流程依赖。 */
 	@GetMapping("/getAllImgByAlbum")
-	@ApiOperationSupport(order = 15)
+	@ApiOperationSupport(order = 16)
 	public R<IPage<ImgDetailVO>> getAllImgByAlbum(@RequestParam long page,
 											 @RequestParam long limit,
 											 @RequestParam String albumId,
@@ -212,7 +225,7 @@ public class ImgDetailController extends BladeController {
 
 	@IsAdmin
 	@PostMapping("/updateStatus")
-	@ApiOperationSupport(order = 16)
+	@ApiOperationSupport(order = 17)
 	@Operation(summary = "兼容状态更新", description = "历史管理端接口，新页面应调用 audit")
 	public R updateStatus(@RequestParam String id, @RequestParam Integer status) {
 		imgDetailService.updateStatus(id, status);
@@ -229,7 +242,7 @@ public class ImgDetailController extends BladeController {
 	}
 
 	private boolean isVideoMedia(String mediaType, String mediaUrl) {
-		return hasText(mediaType) && "video".equalsIgnoreCase(mediaType.trim()) || looksLikeVideoUrl(mediaUrl);
+		return (hasText(mediaType) && "video".equalsIgnoreCase(mediaType.trim())) || looksLikeVideoUrl(mediaUrl);
 	}
 
 	private boolean hasUsableImageUrl(String url) {
