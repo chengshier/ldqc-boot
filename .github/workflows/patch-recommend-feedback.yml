@@ -1,0 +1,89 @@
+name: Connect recommendation feedback scoring
+
+on:
+  push:
+    branches:
+      - refactor/market-ready-phase1
+    paths:
+      - '.github/workflows/patch-recommend-feedback.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+          fetch-depth: 0
+
+      - name: Patch recommendation service
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/java/org/springblade/modules/recommend/service/impl/RecommendServiceImpl.java')
+          text = path.read_text(encoding='utf-8')
+
+          import_marker = 'import org.springblade.modules.userinterest.service.IUserInterestService;'
+          if 'RecommendFeedbackService' not in text:
+              if import_marker not in text:
+                  raise SystemExit('recommend import marker missing')
+              text = text.replace(import_marker, import_marker + '\nimport org.springblade.modules.recommendfeedback.service.RecommendFeedbackService;', 1)
+
+          field_marker = '    private final IUserInterestService userInterestService;'
+          if 'private final RecommendFeedbackService recommendFeedbackService;' not in text:
+              if field_marker not in text:
+                  raise SystemExit('recommend field marker missing')
+              text = text.replace(field_marker, field_marker + '\n    private final RecommendFeedbackService recommendFeedbackService;', 1)
+
+          old_block = '''\t\tSet<Long> browseCategoryIds = recentBrowseCategories(userId);
+\t\tList<ImgDetailEntity> contents = imgDetailService.list(new QueryWrapper<ImgDetailEntity>()
+\t\t\t.eq("status", 1).orderByDesc("create_time").last("LIMIT 300"));
+\t\tcontents.sort((left, right) -> Double.compare(contentScore(right, interestIds, browseCategoryIds), contentScore(left, interestIds, browseCategoryIds)));'''
+          new_block = '''\t\tSet<Long> browseCategoryIds = recentBrowseCategories(userId);
+\t\tSet<Long> hiddenContentIds = recommendFeedbackService.notInterestedContentIds(userId);
+\t\tMap<Long, Double> behaviorScores = recommendFeedbackService.contentBehaviorScores(userId);
+\t\tList<ImgDetailEntity> contents = imgDetailService.list(new QueryWrapper<ImgDetailEntity>()
+\t\t\t.eq("status", 1).eq("is_deleted", 0).orderByDesc("create_time").last("LIMIT 300"));
+\t\tcontents.removeIf(item -> item.getId() != null && hiddenContentIds.contains(item.getId()));
+\t\tcontents.sort((left, right) -> Double.compare(
+\t\t\tcontentScore(right, interestIds, browseCategoryIds, behaviorScores),
+\t\t\tcontentScore(left, interestIds, browseCategoryIds, behaviorScores)));'''
+          if old_block in text:
+              text = text.replace(old_block, new_block, 1)
+          elif 'hiddenContentIds' not in text:
+              raise SystemExit('home feed block marker missing')
+
+          old_signature = 'private double contentScore(ImgDetailEntity item, Set<Long> interests, Set<Long> browseCategories) {'
+          new_signature = 'private double contentScore(ImgDetailEntity item, Set<Long> interests, Set<Long> browseCategories, Map<Long, Double> behaviorScores) {'
+          text = text.replace(old_signature, new_signature, 1)
+          score_marker = '''\t\tif (browseCategories.contains(categoryId)) score += 25;
+\t\tif (item.getCreateTime() != null) {'''
+          score_replacement = '''\t\tif (browseCategories.contains(categoryId)) score += 25;
+\t\tif (item.getId() != null) score += Math.min(behaviorScores.getOrDefault(item.getId(), 0D), 30D);
+\t\tif (item.getCreateTime() != null) {'''
+          if score_marker in text:
+              text = text.replace(score_marker, score_replacement, 1)
+          elif 'behaviorScores.getOrDefault' not in text:
+              raise SystemExit('content score marker missing')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate
+        run: |
+          grep -q 'RecommendFeedbackService' src/main/java/org/springblade/modules/recommend/service/impl/RecommendServiceImpl.java
+          grep -q 'hiddenContentIds' src/main/java/org/springblade/modules/recommend/service/impl/RecommendServiceImpl.java
+          grep -q 'behaviorScores.getOrDefault' src/main/java/org/springblade/modules/recommend/service/impl/RecommendServiceImpl.java
+
+      - name: Remove workflow and commit
+        run: |
+          rm .github/workflows/patch-recommend-feedback.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main/java/org/springblade/modules/recommend/service/impl/RecommendServiceImpl.java .github/workflows/patch-recommend-feedback.yml
+          git commit -m 'feat: apply recommendation feedback to ranking'
+          git push origin HEAD:refactor/market-ready-phase1
