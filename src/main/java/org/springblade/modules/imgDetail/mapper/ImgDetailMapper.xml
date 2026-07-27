@@ -2,7 +2,6 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="org.springblade.modules.imgDetail.mapper.ImgDetailMapper">
 
-    <!-- 通用查询映射结果 -->
     <resultMap id="imgDetailResultMap" type="org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity">
         <result column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>
@@ -25,6 +24,11 @@
         <result column="agree_count" property="agreeCount"/>
         <result column="collection_count" property="collectionCount"/>
         <result column="comment_count" property="commentCount"/>
+        <result column="audit_reason" property="auditReason"/>
+        <result column="audit_time" property="auditTime"/>
+        <result column="audit_user_id" property="auditUserId"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="media_process_status" property="mediaProcessStatus"/>
         <result column="create_user" property="createUser"/>
         <result column="create_dept" property="createDept"/>
         <result column="create_time" property="createTime"/>
@@ -34,14 +38,11 @@
         <result column="is_deleted" property="isDeleted"/>
     </resultMap>
 
-
     <select id="selectImgDetailPage" resultMap="imgDetailResultMap">
         select * from t_img_detail where is_deleted = 0
     </select>
 
-
     <select id="exportImgDetail" resultType="org.springblade.modules.imgDetail.excel.ImgDetailExcel">
-        SELECT * FROM t_img_detail 
+        SELECT * FROM t_img_detail
     </select>
-
 </mapper>
