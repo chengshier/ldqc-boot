@@ -8,6 +8,7 @@ import org.springblade.core.tool.api.R;
 import org.springblade.core.tool.utils.Func;
 import org.springblade.modules.training.pojo.entity.TrainingEntity;
 import org.springblade.modules.training.service.TrainingCourseAdminService;
+import org.springblade.modules.training.service.TrainingCourseSettingsService;
 import org.springblade.modules.training.service.TrainingLessonMediaProcessor;
 import org.springblade.modules.trainingaccess.pojo.entity.TrainingAccessEntity;
 import org.springblade.modules.trainingchapter.pojo.entity.TrainingChapterEntity;
@@ -23,22 +24,29 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 课程章节、课时、发布和播放授权运营工作台接口。
+ * 课程基础设置、章节、课时、发布和播放授权运营工作台接口。
  */
 @IsAdmin
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("blade-training/course-admin")
-@Tag(name = "课程运营工作台", description = "运营人员维护章节、课时、发布状态和用户播放权限")
+@Tag(name = "课程运营工作台", description = "运营人员维护课程资料、章节、课时、发布状态和用户播放权限")
 public class TrainingCourseAdminController {
 
 	private final TrainingCourseAdminService adminService;
+	private final TrainingCourseSettingsService settingsService;
 	private final TrainingLessonMediaProcessor mediaProcessor;
 
 	@GetMapping("/outline")
 	@Operation(summary = "课程章节课时总览")
 	public R<Map<String, Object>> outline(@RequestParam Long trainingId) {
 		return R.data(adminService.outline(trainingId));
+	}
+
+	@PostMapping("/settings")
+	@Operation(summary = "保存课程基础设置", description = "维护课程形态、授权规则、价格、封面和介绍")
+	public R<TrainingEntity> settings(@RequestBody Map<String, Object> body) {
+		return R.data(settingsService.save(body));
 	}
 
 	@PostMapping("/chapter/save")
