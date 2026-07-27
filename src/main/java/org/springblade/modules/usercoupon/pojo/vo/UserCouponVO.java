@@ -30,6 +30,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import java.io.Serial;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 用户认证类型表 视图实体类
@@ -45,6 +47,7 @@ public class UserCouponVO extends UserCouponEntity {
 
 	private String couponName;
 	private String couponType;
+	private String benefitMode;
 	private String scopeType;
 	private String scopeRefId;
 	private String validType;
@@ -59,6 +62,13 @@ public class UserCouponVO extends UserCouponEntity {
 	private Date templateValidStartAt;
 	private Date templateValidEndAt;
 	private Integer validDays;
+	private String venueName;
+	private String usageNotice;
+	private String userName;
+	private String nickname;
+	private String phoneMask;
+	private Integer totalDurationMinutes;
+	private List<Map<String, Object>> verifyRecords;
 
 }
 
