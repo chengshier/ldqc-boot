@@ -30,17 +30,10 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 视频封面生成工具组件。
+ * 社区短视频封面异步生成组件。
  *
- * 使用场景：
- * 1. 前端先通过 BladeX 原有 /put-file 上传视频，得到 videoUrl。
- * 2. 前端保存文章，coverUrl 为空。
- * 3. 后端保存文章成功后，调用 generateCoverAsync(article)。
- * 4. 本工具异步下载视频、FFmpeg 截图、上传封面、根据文章 id 更新 coverUrl。
- *
- * 注意：
- * - 这是 Spring Bean，不建议写成 static 工具类，因为要注入 OssBuilder、ArticleService 和配置项。
- * - 请把 Article、ArticleService、字段名替换为你项目中的真实类名和字段名。
+ * <p>处理结果会同步写入 media_process_status：PROCESSING、READY、FAILED，
+ * 内容审核工作台只有在 READY 后才允许审核通过。</p>
  */
 @Slf4j
 @Component
@@ -48,12 +41,6 @@ import java.util.concurrent.TimeUnit;
 public class VideoCoverGenerateTool {
 
 	private final OssBuilder ossBuilder;
-
-	/**
-	 * TODO：替换为你项目里的真实 Service。
-	 * 例如：private final IPostService postService;
-	 * 或：private final IArticleService articleService;
-	 */
 	private final IImgDetailService imgDetailService;
 
 	@Value("${media.ffmpeg-path:ffmpeg}")
@@ -62,301 +49,227 @@ public class VideoCoverGenerateTool {
 	@Value("${media.temp-dir:/data/tmp/video-cover}")
 	private String tempDir;
 
-	@Value("${media.max-video-size:104857600}")
+	@Value("${media.max-video-size:209715200}")
 	private long maxVideoSize;
 
-	/**
-	 * 异步生成视频封面。
-	 *
-	 * @param imgDetail 文章/推文实体，至少需要包含 id 和 videoUrl
-	 */
 	@Async("videoCoverExecutor")
-	public void generateCoverAsync(ImgDetailEntity imgDetail) {
-		if (imgDetail == null) {
-			log.warn("生成视频封面失败：article 为空");
+	public void generateCoverAsync(ImgDetailEntity request) {
+		if (request == null || request.getId() == null) {
+			log.warn("跳过视频封面生成：内容或内容ID为空");
 			return;
 		}
-
-		Long articleId = imgDetail.getId();
-		String videoUrl = imgDetail.getMediaUrl();
-
-		if (articleId == null) {
-			log.warn("生成视频封面失败：articleId 为空");
-			return;
-		}
+		Long contentId = request.getId();
+		String videoUrl = request.getMediaUrl();
 		if (!hasText(videoUrl)) {
-			log.warn("生成视频封面失败：videoUrl 为空，articleId={}", articleId);
+			markFailed(contentId, null, "视频地址为空");
 			return;
 		}
 
-		Path tempVideoPath = null;
-		Path tempCoverPath = null;
-
+		markProcessing(contentId, videoUrl);
+		Path videoPath = null;
+		Path coverPath = null;
 		try {
-			// 1. 二次查询数据库，防止异步执行期间用户已手动设置封面或修改视频。
-			ImgDetailEntity dbArticle = imgDetailService.getById(articleId);
-			if (dbArticle == null) {
-				log.warn("文章不存在，跳过封面生成，articleId={}", articleId);
+			ImgDetailEntity latest = imgDetailService.getById(contentId);
+			if (latest == null || latest.getIsDeleted() != null && latest.getIsDeleted() == 1) {
+				log.warn("内容不存在，取消视频封面处理，contentId={}", contentId);
 				return;
 			}
-			if (hasUsablePoster(dbArticle.getPosterUrl(), dbArticle.getCover())) {
-				log.info("文章已存在可用海报，跳过自动生成，articleId={}", articleId);
+			if (!videoUrl.equals(latest.getMediaUrl())) {
+				log.warn("视频地址已经变化，取消旧任务，contentId={}", contentId);
 				return;
 			}
-			if (!videoUrl.equals(dbArticle.getMediaUrl())) {
-				log.warn("视频地址已变化，跳过封面生成，articleId={}, oldVideoUrl={}, newVideoUrl={}",
-					articleId, videoUrl, dbArticle.getMediaUrl());
+			if (hasUsablePoster(latest.getPosterUrl(), latest.getCover())) {
+				markReady(contentId, videoUrl, null);
 				return;
 			}
 
-			// 2. 准备临时路径。
 			String uuid = UUID.randomUUID().toString().replace("-", "");
-			String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+			Path directory = Paths.get(tempDir);
+			Files.createDirectories(directory);
+			videoPath = directory.resolve(uuid + resolveVideoExtension(videoUrl));
+			coverPath = directory.resolve(uuid + ".jpg");
 
-			Path dir = Paths.get(tempDir);
-			Files.createDirectories(dir);
-
-			tempVideoPath = dir.resolve(uuid + resolveVideoExtension(videoUrl));
-			tempCoverPath = dir.resolve(uuid + ".jpg");
-
-			// 3. 下载视频到临时目录。
-			downloadVideo(videoUrl, tempVideoPath, maxVideoSize);
-
-			// 4. FFmpeg 截取封面。
-			boolean success = generateCoverByFfmpeg(tempVideoPath, tempCoverPath);
-			if (!success) {
-				updateCoverFailed(articleId, videoUrl, "FFmpeg 截取封面失败");
+			downloadVideo(videoUrl, videoPath, maxVideoSize);
+			if (!generateCoverByFfmpeg(videoPath, coverPath)) {
+				markFailed(contentId, videoUrl, "FFmpeg截取封面失败");
 				return;
 			}
 
-			// 5. 上传封面到 OSS / MinIO。
-			String coverObjectName = "video-cover/" + datePath + "/" + uuid + ".jpg";
-//			BladeFile coverFile;
-//			try (InputStream coverInputStream = Files.newInputStream(tempCoverPath)) {
-//				coverFile = ossBuilder.template().putFile(coverObjectName, coverInputStream);
-//			}
-			String tenantId = dbArticle.getTenantId();
-
-			if (!hasText(tenantId)) {
-				tenantId = "000000";
+			String tenantId = hasText(latest.getTenantId()) ? latest.getTenantId() : "000000";
+			String datePath = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+			String objectName = "video-cover/" + datePath + "/" + uuid + ".jpg";
+			BladeFile uploaded;
+			try (InputStream stream = Files.newInputStream(coverPath)) {
+				uploaded = ossBuilder.template(tenantId, "").putFile(objectName, stream);
 			}
-
-			BladeFile coverFile;
-			try (InputStream coverInputStream = Files.newInputStream(tempCoverPath)) {
-				coverFile = ossBuilder.template(tenantId, "").putFile(coverObjectName, coverInputStream);
+			if (uploaded == null || !hasText(uploaded.getLink())) {
+				markFailed(contentId, videoUrl, "封面上传后未返回地址");
+				return;
 			}
-
-			// 6. 根据文章 id + videoUrl 更新封面。
-			updateCoverSuccess(articleId, videoUrl, coverFile.getLink());
-			log.info("视频封面生成成功，articleId={}，coverUrl={}", articleId, coverFile.getLink());
-		} catch (Exception e) {
-			log.error("生成视频封面异常，articleId={}，videoUrl={}", articleId, videoUrl, e);
-			updateCoverFailed(articleId, videoUrl, e.getMessage());
+			markReady(contentId, videoUrl, uploaded.getLink());
+			log.info("视频封面生成完成，contentId={}，cover={}", contentId, uploaded.getLink());
+		} catch (Exception exception) {
+			log.error("视频封面处理异常，contentId={}，videoUrl={}", contentId, videoUrl, exception);
+			markFailed(contentId, videoUrl, exception.getMessage());
 		} finally {
-			deleteQuietly(tempVideoPath);
-			deleteQuietly(tempCoverPath);
+			deleteQuietly(videoPath);
+			deleteQuietly(coverPath);
 		}
 	}
 
-	/**
-	 * 下载视频到临时文件。
-	 */
+	private void markProcessing(Long contentId, String videoUrl) {
+		LambdaUpdateWrapper<ImgDetailEntity> wrapper = Wrappers.<ImgDetailEntity>lambdaUpdate()
+			.eq(ImgDetailEntity::getId, contentId)
+			.eq(videoUrl != null, ImgDetailEntity::getMediaUrl, videoUrl)
+			.set(ImgDetailEntity::getMediaProcessStatus, "PROCESSING")
+			.set(ImgDetailEntity::getUpdateTime, LocalDateTime.now());
+		imgDetailService.update(wrapper);
+	}
+
+	private void markReady(Long contentId, String videoUrl, String coverUrl) {
+		LambdaUpdateWrapper<ImgDetailEntity> wrapper = Wrappers.<ImgDetailEntity>lambdaUpdate()
+			.eq(ImgDetailEntity::getId, contentId)
+			.eq(videoUrl != null, ImgDetailEntity::getMediaUrl, videoUrl)
+			.set(ImgDetailEntity::getMediaProcessStatus, "READY")
+			.set(ImgDetailEntity::getUpdateTime, LocalDateTime.now());
+		if (hasText(coverUrl)) {
+			wrapper.set(ImgDetailEntity::getPosterUrl, coverUrl)
+				.set(ImgDetailEntity::getCover, coverUrl);
+		}
+		imgDetailService.update(wrapper);
+	}
+
+	private void markFailed(Long contentId, String videoUrl, String reason) {
+		try {
+			LambdaUpdateWrapper<ImgDetailEntity> wrapper = Wrappers.<ImgDetailEntity>lambdaUpdate()
+				.eq(ImgDetailEntity::getId, contentId)
+				.eq(videoUrl != null, ImgDetailEntity::getMediaUrl, videoUrl)
+				.set(ImgDetailEntity::getMediaProcessStatus, "FAILED")
+				.set(ImgDetailEntity::getUpdateTime, LocalDateTime.now());
+			imgDetailService.update(wrapper);
+			log.warn("视频封面处理失败，contentId={}，reason={}", contentId, safeReason(reason));
+		} catch (Exception exception) {
+			log.error("回写视频处理失败状态异常，contentId={}", contentId, exception);
+		}
+	}
+
 	private void downloadVideo(String videoUrl, Path targetPath, long maxSize) throws Exception {
 		HttpURLConnection connection = null;
 		try {
-			URL url = new URL(videoUrl);
-			connection = (HttpURLConnection) url.openConnection();
+			connection = (HttpURLConnection) new URL(videoUrl).openConnection();
+			connection.setInstanceFollowRedirects(true);
 			connection.setConnectTimeout(10000);
-			connection.setReadTimeout(60000);
+			connection.setReadTimeout(90000);
 			connection.setRequestMethod("GET");
-			connection.setRequestProperty("User-Agent", "Mozilla/5.0");
-
-			int responseCode = connection.getResponseCode();
-			if (responseCode < 200 || responseCode >= 300) {
-				throw new RuntimeException("下载视频失败，HTTP状态码：" + responseCode);
+			connection.setRequestProperty("User-Agent", "Ldqc-Media-Processor/1.0");
+			int code = connection.getResponseCode();
+			if (code < 200 || code >= 300) {
+				throw new IllegalStateException("视频下载失败，HTTP " + code);
 			}
-
-			long contentLength = connection.getContentLengthLong();
-			if (contentLength > maxSize) {
-				throw new RuntimeException("视频文件过大，大小=" + contentLength + "，限制=" + maxSize);
+			long declaredSize = connection.getContentLengthLong();
+			if (declaredSize > maxSize) {
+				throw new IllegalStateException("视频大小超过后端处理限制");
 			}
-
 			long total = 0L;
-			try (
-				InputStream inputStream = connection.getInputStream();
-				OutputStream outputStream = Files.newOutputStream(
-					targetPath,
-					StandardOpenOption.CREATE,
-					StandardOpenOption.TRUNCATE_EXISTING
-				)
-			) {
+			try (InputStream input = connection.getInputStream();
+				 OutputStream output = Files.newOutputStream(targetPath,
+					 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
 				byte[] buffer = new byte[8192];
-				int len;
-				while ((len = inputStream.read(buffer)) != -1) {
-					total += len;
+				int length;
+				while ((length = input.read(buffer)) != -1) {
+					total += length;
 					if (total > maxSize) {
-						throw new RuntimeException("视频文件超过最大限制：" + maxSize);
+						throw new IllegalStateException("视频大小超过后端处理限制");
 					}
-					outputStream.write(buffer, 0, len);
+					output.write(buffer, 0, length);
 				}
 			}
-
-			if (!Files.exists(targetPath) || Files.size(targetPath) <= 0) {
-				throw new RuntimeException("视频下载完成但文件为空");
+			if (!Files.exists(targetPath) || Files.size(targetPath) == 0) {
+				throw new IllegalStateException("下载的视频文件为空");
 			}
 		} finally {
-			if (connection != null) {
-				connection.disconnect();
-			}
+			if (connection != null) connection.disconnect();
 		}
 	}
 
-	/**
-	 * 使用 FFmpeg 截取封面。
-	 */
 	private boolean generateCoverByFfmpeg(Path videoPath, Path coverPath) {
+		Process process = null;
 		try {
 			ProcessBuilder builder = new ProcessBuilder(
-				ffmpegPath,
-				"-y",
-				"-ss", "00:00:01",
-				"-i", videoPath.toAbsolutePath().toString(),
-				"-frames:v", "1",
-				"-vf", "scale=720:-2",
-				"-q:v", "3",
-				coverPath.toAbsolutePath().toString()
-			);
-
+				ffmpegPath, "-y", "-ss", "00:00:01", "-i", videoPath.toAbsolutePath().toString(),
+				"-frames:v", "1", "-vf", "scale=720:-2", "-q:v", "3", coverPath.toAbsolutePath().toString());
 			builder.redirectErrorStream(true);
-			Process process = builder.start();
-
+			process = builder.start();
 			StringBuilder output = new StringBuilder();
-			Thread outputThread = new Thread(() -> {
-				try (BufferedReader reader = new BufferedReader(
-					new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-					String line;
-					while ((line = reader.readLine()) != null) {
-						output.append(line).append("\n");
-					}
-				} catch (Exception ignored) {
-				}
-			});
-			outputThread.start();
-
-			boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+			Process currentProcess = process;
+			Thread readerThread = new Thread(() -> readProcessOutput(currentProcess, output));
+			readerThread.setDaemon(true);
+			readerThread.start();
+			boolean finished = process.waitFor(45, TimeUnit.SECONDS);
 			if (!finished) {
 				process.destroyForcibly();
-				log.error("FFmpeg 截取封面超时，videoPath={}", videoPath);
 				return false;
 			}
-
-			outputThread.join(1000);
-			int exitCode = process.exitValue();
-			if (exitCode != 0) {
-				log.error("FFmpeg 截取封面失败，exitCode={}，output={}", exitCode, output);
+			readerThread.join(1000);
+			if (process.exitValue() != 0) {
+				log.error("FFmpeg执行失败，output={}", output);
 				return false;
 			}
-
 			return Files.exists(coverPath) && Files.size(coverPath) > 0;
-		} catch (Exception e) {
-			log.error("执行 FFmpeg 截封面异常", e);
+		} catch (Exception exception) {
+			log.error("执行FFmpeg异常", exception);
+			if (process != null) process.destroyForcibly();
 			return false;
 		}
 	}
 
-	/**
-	 * 成功后根据实体 id 更新封面。
-	 */
-	private void updateCoverSuccess(Long articleId, String videoUrl, String coverUrl) {
-		LambdaUpdateWrapper<ImgDetailEntity> wrapper = Wrappers.lambdaUpdate();
-		wrapper.eq(ImgDetailEntity::getId, articleId);
-		wrapper.eq(ImgDetailEntity::getMediaUrl, videoUrl);
-
-		// 仅在当前没有可用图片海报时回写，避免覆盖用户手动上传的图片封面。
-		wrapper.and(w -> w
-			.and(nested -> nested.isNull(ImgDetailEntity::getPosterUrl).or().eq(ImgDetailEntity::getPosterUrl, "").or().like(ImgDetailEntity::getPosterUrl, ".mp4").or().like(ImgDetailEntity::getPosterUrl, ".mov").or().like(ImgDetailEntity::getPosterUrl, ".avi").or().like(ImgDetailEntity::getPosterUrl, ".mkv").or().like(ImgDetailEntity::getPosterUrl, ".m4v").or().like(ImgDetailEntity::getPosterUrl, ".webm").or().like(ImgDetailEntity::getPosterUrl, ".m3u8"))
-			.and(nested -> nested.isNull(ImgDetailEntity::getCover).or().eq(ImgDetailEntity::getCover, "").or().like(ImgDetailEntity::getCover, ".mp4").or().like(ImgDetailEntity::getCover, ".mov").or().like(ImgDetailEntity::getCover, ".avi").or().like(ImgDetailEntity::getCover, ".mkv").or().like(ImgDetailEntity::getCover, ".m4v").or().like(ImgDetailEntity::getCover, ".webm").or().like(ImgDetailEntity::getCover, ".m3u8"))
-		);
-
-		wrapper.set(ImgDetailEntity::getPosterUrl, coverUrl);
-		wrapper.set(ImgDetailEntity::getCover, coverUrl);
-//		wrapper.set(ImgDetailEntity::getCoverStatus, "DONE");
-		wrapper.set(ImgDetailEntity::getUpdateTime, LocalDateTime.now());
-
-		boolean updated = imgDetailService.update(wrapper);
-		if (!updated) {
-			log.warn("封面生成成功但文章更新失败，articleId={}，videoUrl={}", articleId, videoUrl);
-		}
-	}
-
-	/**
-	 * 失败后更新状态。
-	 */
-	private void updateCoverFailed(Long articleId, String videoUrl, String reason) {
-		try {
-			LambdaUpdateWrapper<ImgDetailEntity> wrapper = Wrappers.lambdaUpdate();
-			wrapper.eq(ImgDetailEntity::getId, articleId);
-			wrapper.eq(ImgDetailEntity::getMediaUrl, videoUrl);
-
-			// 已经有封面的，不覆盖状态。
-			wrapper.and(w -> w.isNull(ImgDetailEntity::getCover).or().eq(ImgDetailEntity::getCover, ""));
-
-//			wrapper.set(ImgDetailEntity::getCoverStatus, "FAILED");
-//			wrapper.set(ImgDetailEntity::getCoverFailReason, safeReason(reason));
-			wrapper.set(ImgDetailEntity::getUpdateTime, LocalDateTime.now());
-
-			imgDetailService.update(wrapper);
-		} catch (Exception e) {
-			log.error("更新封面失败状态异常，articleId={}", articleId, e);
+	private void readProcessOutput(Process process, StringBuilder output) {
+		try (BufferedReader reader = new BufferedReader(
+			new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+			String line;
+			while ((line = reader.readLine()) != null) {
+				output.append(line).append('\n');
+			}
+		} catch (Exception ignored) {
+			// 进程退出时流关闭属于正常情况。
 		}
 	}
 
 	private String resolveVideoExtension(String videoUrl) {
-		if (!hasText(videoUrl)) {
-			return ".mp4";
-		}
-		String lower = videoUrl.toLowerCase();
-		String[] suffixes = new String[]{".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm", ".mpeg", ".mpg"};
+		String lower = videoUrl == null ? "" : videoUrl.toLowerCase();
+		String[] suffixes = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm", ".mpeg", ".mpg"};
 		for (String suffix : suffixes) {
-			if (lower.contains(suffix)) {
-				return suffix;
-			}
+			if (lower.contains(suffix)) return suffix;
 		}
 		return ".mp4";
 	}
 
-	private boolean looksLikeVideoUrl(String url) {
-		if (!hasText(url)) {
-			return false;
-		}
-		String lower = url.trim().toLowerCase();
-		return lower.contains(".mp4") || lower.contains(".mov") || lower.contains(".avi") || lower.contains(".mkv") || lower.contains(".m4v") || lower.contains(".webm") || lower.contains(".m3u8");
+	private boolean hasUsablePoster(String posterUrl, String cover) {
+		return hasText(posterUrl) && !looksLikeVideo(posterUrl)
+			|| hasText(cover) && !looksLikeVideo(cover);
 	}
 
-	private boolean hasUsablePoster(String posterUrl, String cover) {
-		return hasText(posterUrl) && !looksLikeVideoUrl(posterUrl)
-			|| hasText(cover) && !looksLikeVideoUrl(cover);
+	private boolean looksLikeVideo(String value) {
+		String lower = value == null ? "" : value.toLowerCase();
+		return lower.contains(".mp4") || lower.contains(".mov") || lower.contains(".avi")
+			|| lower.contains(".mkv") || lower.contains(".m4v") || lower.contains(".webm") || lower.contains(".m3u8");
 	}
 
 	private String safeReason(String reason) {
-		if (!hasText(reason)) {
-			return "生成视频封面失败";
-		}
-		return reason.length() > 500 ? reason.substring(0, 500) : reason;
+		if (!hasText(reason)) return "未知处理异常";
+		return reason.length() > 300 ? reason.substring(0, 300) : reason;
 	}
 
 	private void deleteQuietly(Path path) {
-		if (path == null) {
-			return;
-		}
+		if (path == null) return;
 		try {
 			Files.deleteIfExists(path);
-		} catch (Exception e) {
-			log.warn("删除临时文件失败：{}", path, e);
+		} catch (Exception exception) {
+			log.warn("临时文件删除失败：{}", path, exception);
 		}
 	}
 
-	private boolean hasText(String text) {
-		return text != null && text.trim().length() > 0;
+	private boolean hasText(String value) {
+		return value != null && !value.trim().isEmpty();
 	}
 }
