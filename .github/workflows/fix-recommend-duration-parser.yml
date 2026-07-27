@@ -1,0 +1,59 @@
+name: Fix recommendation duration parser compatibility
+
+on:
+  push:
+    branches:
+      - refactor/market-ready-phase1
+    paths:
+      - '.github/workflows/fix-recommend-duration-parser.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+          fetch-depth: 0
+
+      - name: Replace framework-specific overload
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/main/java/org/springblade/modules/recommendfeedback/service/RecommendFeedbackService.java')
+          text = path.read_text(encoding='utf-8')
+          old = 'event.setDurationMs(Math.max(0L, Func.toLong(body.get("durationMs"), 0L)));'
+          new = 'event.setDurationMs(parseNonNegativeLong(body.get("durationMs")));'
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'parseNonNegativeLong(body.get("durationMs"))' not in text:
+              raise SystemExit('duration parser marker not found')
+
+          marker = '''\tprivate String normalize(Object value, String defaultValue) {'''
+          helper = '''\tprivate long parseNonNegativeLong(Object value) {
+\t\tif (value == null || Func.isBlank(String.valueOf(value))) return 0L;
+\t\ttry {
+\t\t\treturn Math.max(Long.parseLong(String.valueOf(value)), 0L);
+\t\t} catch (NumberFormatException exception) {
+\t\t\treturn 0L;
+\t\t}
+\t}
+
+'''
+          if 'private long parseNonNegativeLong' not in text:
+              if marker not in text: raise SystemExit('helper insertion marker not found')
+              text = text.replace(marker, helper + marker, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Remove workflow and commit
+        run: |
+          rm .github/workflows/fix-recommend-duration-parser.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main/java/org/springblade/modules/recommendfeedback/service/RecommendFeedbackService.java .github/workflows/fix-recommend-duration-parser.yml
+          git commit -m 'fix: parse recommendation duration without framework overload'
+          git push origin HEAD:refactor/market-ready-phase1
