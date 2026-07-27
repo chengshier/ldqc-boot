@@ -34,6 +34,7 @@ public class MallProductEntity extends TenantEntity {
 	private Integer marketAmount;
 	private Integer stockTotal;
 	private Integer stockAvailable;
+	private Integer soldQty;
 	/** 履约类型 SHIP/PICKUP/VIRTUAL */
 	private String fulfillmentType;
 	private Long merchantId;
