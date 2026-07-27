@@ -1,172 +1,164 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.venue.controller;
 
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
-import lombok.AllArgsConstructor;
-import jakarta.validation.Valid;
-
-import org.springblade.core.secure.BladeUser;
-import org.springblade.core.secure.annotation.IsAdmin;
-import org.springblade.core.mp.support.Condition;
-import org.springblade.core.mp.support.Query;
-import org.springblade.core.tool.api.R;
-import org.springblade.core.tool.utils.Func;
-import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
+import org.springblade.core.boot.ctrl.BladeController;
+import org.springblade.core.excel.util.ExcelUtil;
+import org.springblade.core.mp.support.Condition;
+import org.springblade.core.mp.support.Query;
+import org.springblade.core.secure.BladeUser;
+import org.springblade.core.secure.annotation.IsAdmin;
+import org.springblade.core.tool.api.R;
+import org.springblade.core.tool.utils.DateUtil;
+import org.springblade.core.tool.utils.Func;
+import org.springblade.modules.venue.excel.VenueExcel;
 import org.springblade.modules.venue.pojo.entity.VenueEntity;
 import org.springblade.modules.venue.pojo.vo.VenueVO;
-import org.springblade.modules.venue.excel.VenueExcel;
-import org.springblade.modules.venue.wrapper.VenueWrapper;
 import org.springblade.modules.venue.service.IVenueService;
-import org.springblade.core.boot.ctrl.BladeController;
-import org.springblade.core.tool.utils.DateUtil;
-import org.springblade.core.excel.util.ExcelUtil;
-import org.springblade.core.tool.constant.BladeConstant;
-import java.util.Map;
-import java.util.List;
-import jakarta.servlet.http.HttpServletResponse;
+import org.springblade.modules.venue.wrapper.VenueWrapper;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 体育场馆表 控制器
- *
- * @author BladeX
- * @since 2026-03-10
- */
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+/** 体育场馆公开查询和管理端维护接口。 */
 @RestController
 @AllArgsConstructor
 @RequestMapping("blade-venue/venue")
-@Tag(name = "体育场馆表", description = "体育场馆表接口")
+@Tag(name = "体育场馆", description = "场馆公开列表、详情和管理端维护接口")
 public class VenueController extends BladeController {
 
 	private final IVenueService venueService;
 
-	/**
-	 * 体育场馆表 详情
-	 */
-	@GetMapping("/detail")
+	@GetMapping("/mobile/page")
 	@ApiOperationSupport(order = 1)
-	@Operation(summary = "详情", description  = "传入venue")
+	@Operation(summary = "公开场馆分页", description = "支持关键词、类型和经纬度范围筛选")
+	public R<IPage<VenueVO>> mobilePage(Query query,
+		@RequestParam(required = false) String keyword,
+		@RequestParam(required = false) Long typeId,
+		@RequestParam(required = false) BigDecimal minLongitude,
+		@RequestParam(required = false) BigDecimal maxLongitude,
+		@RequestParam(required = false) BigDecimal minLatitude,
+		@RequestParam(required = false) BigDecimal maxLatitude) {
+		QueryWrapper<VenueEntity> wrapper = new QueryWrapper<VenueEntity>()
+			.eq("status", 1)
+			.eq("is_deleted", 0)
+			.eq(typeId != null, "type_id", typeId)
+			.ge(minLongitude != null, "longitude", minLongitude)
+			.le(maxLongitude != null, "longitude", maxLongitude)
+			.ge(minLatitude != null, "latitude", minLatitude)
+			.le(maxLatitude != null, "latitude", maxLatitude);
+		if (!Func.isBlank(keyword)) {
+			wrapper.and(item -> item.like("name", keyword).or().like("address", keyword).or().like("tags", keyword));
+		}
+		wrapper.orderByDesc("sort_order").orderByDesc("rating").orderByDesc("update_time");
+		IPage<VenueEntity> page = venueService.page(Condition.getPage(query), wrapper);
+		return R.data(VenueWrapper.build().pageVO(page));
+	}
+
+	@GetMapping("/mobile/detail")
+	@ApiOperationSupport(order = 2)
+	@Operation(summary = "公开场馆详情")
+	public R<VenueVO> mobileDetail(@RequestParam Long id) {
+		VenueEntity detail = venueService.getOne(Wrappers.<VenueEntity>lambdaQuery()
+			.eq(VenueEntity::getId, id)
+			.eq(VenueEntity::getStatus, 1)
+			.eq(VenueEntity::getIsDeleted, 0)
+			.last("limit 1"));
+		if (detail == null) return R.fail("场馆不存在或已停用");
+		return R.data(VenueWrapper.build().entityVO(detail));
+	}
+
+	@IsAdmin
+	@GetMapping("/detail")
+	@ApiOperationSupport(order = 10)
+	@Operation(summary = "管理端场馆详情")
 	public R<VenueVO> detail(VenueEntity venue) {
 		VenueEntity detail = venueService.getOne(Condition.getQueryWrapper(venue));
 		return R.data(VenueWrapper.build().entityVO(detail));
 	}
-	/**
-	 * 体育场馆表 分页
-	 */
+
+	@IsAdmin
 	@GetMapping("/list")
-	@ApiOperationSupport(order = 2)
-	@Operation(summary = "分页", description  = "传入venue")
+	@ApiOperationSupport(order = 11)
+	@Operation(summary = "管理端场馆分页")
 	public R<IPage<VenueVO>> list(@Parameter(hidden = true) @RequestParam Map<String, Object> venue, Query query) {
-		IPage<VenueEntity> pages = venueService.page(Condition.getPage(query), Condition.getQueryWrapper(venue, VenueEntity.class));
+		IPage<VenueEntity> pages = venueService.page(
+			Condition.getPage(query), Condition.getQueryWrapper(venue, VenueEntity.class));
 		return R.data(VenueWrapper.build().pageVO(pages));
 	}
 
-	/**
-	 * 体育场馆表 分页
-	 */
+	@IsAdmin
 	@GetMapping("/listDic")
-	@ApiOperationSupport(order = 2)
-	@Operation(summary = "分页", description  = "传入venue")
-	public R<List<VenueEntity>> listDic(@Parameter(hidden = true) @RequestParam Map<String, Object> venue) {
-
-		return R.data(venueService.list());
+	@ApiOperationSupport(order = 12)
+	@Operation(summary = "管理端场馆选择器")
+	public R<List<VenueEntity>> listDic() {
+		return R.data(venueService.list(Wrappers.<VenueEntity>lambdaQuery()
+			.eq(VenueEntity::getIsDeleted, 0).orderByAsc(VenueEntity::getName)));
 	}
 
-	/**
-	 * 体育场馆表 自定义分页
-	 */
+	@IsAdmin
 	@GetMapping("/page")
-	@ApiOperationSupport(order = 3)
-	@Operation(summary = "分页", description  = "传入venue")
+	@ApiOperationSupport(order = 13)
+	@Operation(summary = "管理端场馆关联分页")
 	public R<IPage<VenueVO>> page(VenueVO venue, Query query) {
-		IPage<VenueVO> pages = venueService.selectVenuePage(Condition.getPage(query), venue);
-		return R.data(pages);
+		return R.data(venueService.selectVenuePage(Condition.getPage(query), venue));
 	}
 
-	/**
-	 * 体育场馆表 新增
-	 */
+	@IsAdmin
 	@PostMapping("/save")
-	@ApiOperationSupport(order = 4)
-	@Operation(summary = "新增", description  = "传入venue")
+	@ApiOperationSupport(order = 14)
+	@Operation(summary = "管理端新增场馆")
 	public R save(@Valid @RequestBody VenueEntity venue) {
 		return R.status(venueService.save(venue));
 	}
 
-	/**
-	 * 体育场馆表 修改
-	 */
+	@IsAdmin
 	@PostMapping("/update")
-	@ApiOperationSupport(order = 5)
-	@Operation(summary = "修改", description  = "传入venue")
+	@ApiOperationSupport(order = 15)
+	@Operation(summary = "管理端修改场馆")
 	public R update(@Valid @RequestBody VenueEntity venue) {
 		return R.status(venueService.updateById(venue));
 	}
 
-	/**
-	 * 体育场馆表 新增或修改
-	 */
+	@IsAdmin
 	@PostMapping("/submit")
-	@ApiOperationSupport(order = 6)
-	@Operation(summary = "新增或修改", description  = "传入venue")
+	@ApiOperationSupport(order = 16)
+	@Operation(summary = "管理端保存场馆")
 	public R submit(@Valid @RequestBody VenueEntity venue) {
 		return R.status(venueService.saveOrUpdate(venue));
 	}
 
-	/**
-	 * 体育场馆表 删除
-	 */
+	@IsAdmin
 	@PostMapping("/remove")
-	@ApiOperationSupport(order = 7)
-	@Operation(summary = "逻辑删除", description  = "传入ids")
-	public R remove(@Parameter(description = "主键集合", required = true) @RequestParam String ids) {
+	@ApiOperationSupport(order = 17)
+	@Operation(summary = "管理端删除场馆")
+	public R remove(@RequestParam String ids) {
 		return R.status(venueService.deleteLogic(Func.toLongList(ids)));
 	}
 
-
-	/**
-	 * 导出数据
-	 */
 	@IsAdmin
 	@GetMapping("/export-venue")
-	@ApiOperationSupport(order = 9)
-	@Operation(summary = "导出数据", description  = "传入venue")
-	public void exportVenue(@Parameter(hidden = true) @RequestParam Map<String, Object> venue, BladeUser bladeUser, HttpServletResponse response) {
+	@ApiOperationSupport(order = 18)
+	@Operation(summary = "导出场馆数据")
+	public void exportVenue(@Parameter(hidden = true) @RequestParam Map<String, Object> venue,
+		BladeUser bladeUser, HttpServletResponse response) {
 		QueryWrapper<VenueEntity> queryWrapper = Condition.getQueryWrapper(venue, VenueEntity.class);
-		//if (!AuthUtil.isAdministrator()) {
-		//	queryWrapper.lambda().eq(Venue::getTenantId, bladeUser.getTenantId());
-		//}
-		//queryWrapper.lambda().eq(VenueEntity::getIsDeleted, BladeConstant.DB_NOT_DELETED);
 		List<VenueExcel> list = venueService.exportVenue(queryWrapper);
-		ExcelUtil.export(response, "体育场馆表数据" + DateUtil.time(), "体育场馆表数据表", list, VenueExcel.class);
+		ExcelUtil.export(response, "体育场馆" + DateUtil.time(), "体育场馆", list, VenueExcel.class);
 	}
-
 }
