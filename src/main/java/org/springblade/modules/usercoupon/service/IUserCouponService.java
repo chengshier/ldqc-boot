@@ -63,6 +63,8 @@ public interface IUserCouponService extends BaseService<UserCouponEntity> {
 	 */
 	String useCoupon(String couponNo, String orderNo, Long merchantUserId);
 
+	String useCouponById(Long userCouponId, String orderNo, Long merchantUserId, boolean fullUse, int consumeDurationMinutes, int consumeTimes);
+
 	/**
 	 * 释放锁券
 	 */

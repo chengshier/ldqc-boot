@@ -107,6 +107,46 @@ public class UserCouponServiceImpl extends BaseServiceImpl<UserCouponMapper, Use
 	}
 
 	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public String useCouponById(Long userCouponId, String orderNo, Long merchantUserId, boolean fullUse, int consumeDurationMinutes, int consumeTimes) {
+		UserCouponEntity coupon = getById(userCouponId);
+		if (coupon == null || coupon.getIsDeleted() != null && coupon.getIsDeleted() == 1) return "券不存在";
+		if (!"UNUSED".equalsIgnoreCase(coupon.getCouponStatus()) && !"PARTIAL_USED".equalsIgnoreCase(coupon.getCouponStatus())) return "券状态不可核销";
+		if (coupon.getValidEndAt() != null && coupon.getValidEndAt().before(new Date())) return "券已过期";
+		int duration = Math.max(consumeDurationMinutes, 0);
+		int times = Math.max(consumeTimes, 0);
+		boolean durationCoupon = coupon.getRemainDurationMinutes() != null && coupon.getRemainDurationMinutes() > 0;
+		boolean timesCoupon = coupon.getRemainTimes() != null && coupon.getRemainTimes() > 0;
+		if (!fullUse && !durationCoupon && !timesCoupon) return "该券不支持部分核销";
+		if (durationCoupon) {
+			int used = fullUse ? coupon.getRemainDurationMinutes() : duration;
+			if (used <= 0 || used > coupon.getRemainDurationMinutes()) return "核销时长不合法";
+			coupon.setRemainDurationMinutes(coupon.getRemainDurationMinutes() - used);
+			duration = used;
+		}
+		if (timesCoupon) {
+			int used = fullUse ? coupon.getRemainTimes() : times;
+			if (used <= 0 || used > coupon.getRemainTimes()) return "核销次数不合法";
+			coupon.setRemainTimes(coupon.getRemainTimes() - used);
+			times = used;
+		}
+		boolean finished = (!durationCoupon || coupon.getRemainDurationMinutes() == 0) && (!timesCoupon || coupon.getRemainTimes() == 0);
+		coupon.setCouponStatus(finished ? "USED" : "PARTIAL_USED");
+		coupon.setUsedAt(new Date());
+		coupon.setUsedOrderNo(orderNo);
+		coupon.setVerifyMerchantUserId(merchantUserId);
+		coupon.setVerifyAt(new Date());
+		updateById(coupon);
+		CouponVerifyLogEntity log = new CouponVerifyLogEntity();
+		log.setUserCouponId(coupon.getId()); log.setUserId(coupon.getUserId()); log.setMerchantUserId(merchantUserId);
+		log.setTemplateId(coupon.getCouponTemplateId()); log.setCouponNo(coupon.getCouponNo());
+		log.setVerifyChannel("MINI_PROGRAM"); log.setVerifyResult(1); log.setVerifyStatus("FINISHED"); log.setOrderNo(orderNo);
+		log.setExtJson("{\"consumeDurationMinutes\":" + duration + ",\"consumeTimes\":" + times + "}");
+		couponVerifyLogService.save(log);
+		return "核销成功";
+	}
+
+	@Override
 	public String releaseCoupon(String couponNo) {
 		UserCouponEntity coupon = this.getOne(Wrappers.<UserCouponEntity>lambdaQuery()
 			.eq(UserCouponEntity::getCouponNo, couponNo)
