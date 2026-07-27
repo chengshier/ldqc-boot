@@ -7,6 +7,7 @@ import lombok.EqualsAndHashCode;
 import org.springblade.core.tenant.mp.TenantEntity;
 
 import java.io.Serial;
+import java.util.Date;
 
 @Data
 @TableName("mall_product")
@@ -17,39 +18,35 @@ public class MallProductEntity extends TenantEntity {
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	@Schema(description = "商品编码")
 	private String productCode;
-
-	@Schema(description = "商品名称")
 	private String productName;
-
-	@Schema(description = "商品描述")
 	private String productDesc;
-
-	@Schema(description = "商品类型 PHYSICAL/VIRTUAL/COUPON")
+	/** 商品业务类型 EQUIPMENT/DIGITAL/OTHER，优惠券保持独立业务。 */
 	private String productType;
-
-	@Schema(description = "商品封面图")
 	private String coverUrl;
-
-	@Schema(description = "兑换所需绿豆")
+	private String galleryJson;
+	private String categoryCode;
+	private String categoryName;
+	private String specJson;
+	private String exchangeNotice;
 	private Integer salePoints;
-
-	@Schema(description = "市场价(分)")
+	/** 市场价，分 */
 	private Integer marketAmount;
-
-	@Schema(description = "库存总量")
 	private Integer stockTotal;
-
-	@Schema(description = "可用库存")
 	private Integer stockAvailable;
-
-	@Schema(description = "状态 1上架 0下架")
+	/** 履约类型 SHIP/PICKUP/VIRTUAL */
+	private String fulfillmentType;
+	private Long merchantId;
+	private String merchantName;
+	private String pickupAddress;
+	/** 每人累计限兑数量，0不限制 */
+	private Integer perUserLimit;
+	/** 单次最大兑换数量 */
+	private Integer maxQtyPerOrder;
+	private Integer requireAddress;
+	private Date publishedAt;
+	/** 1上架0下架 */
 	private Integer status;
-
-	@Schema(description = "排序号 越小越靠前")
 	private Integer sortNo;
-
-	@Schema(description = "扩展配置(JSON字符串)")
 	private String extJson;
 }
