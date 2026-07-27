@@ -22,7 +22,7 @@ CALL add_column_if_missing('ldqc_competition', 'signup_start_time', 'datetime DE
 CALL add_column_if_missing('ldqc_competition', 'signup_end_time', 'datetime DEFAULT NULL COMMENT ''报名截止时间''');
 CALL add_column_if_missing('ldqc_competition', 'max_people_per_order', 'int NOT NULL DEFAULT 1 COMMENT ''单个订单最大报名人数''');
 CALL add_column_if_missing('ldqc_competition', 'payment_mode', 'varchar(16) NOT NULL DEFAULT ''FREE'' COMMENT ''支付方式 FREE/WECHAT''');
-CALL add_column_if_missing('ldqc_competition', 'signup_notice', 'text DEFAULT NULL COMMENT ''报名须知与免责声明''');
+CALL add_column_if_missing('ldqc_competition', 'signup_notice', 'text NULL COMMENT ''报名须知与免责声明''');
 
 CALL add_column_if_missing('ldqc_competition_signup', 'order_no', 'varchar(40) DEFAULT NULL COMMENT ''报名订单号''');
 CALL add_column_if_missing('ldqc_competition_signup', 'request_id', 'varchar(64) DEFAULT NULL COMMENT ''客户端幂等请求号''');
@@ -45,14 +45,13 @@ CALL add_column_if_missing('ldqc_competition_signup', 'cancel_reason', 'varchar(
 
 DROP PROCEDURE IF EXISTS add_column_if_missing;
 
--- 既有赛事默认报名截止时间为赛事开始时间；费用为0时标记免费。
 UPDATE ldqc_competition
    SET signup_end_time = COALESCE(signup_end_time, start_time),
        max_people_per_order = CASE WHEN max_people_per_order IS NULL OR max_people_per_order <= 0 THEN 1 ELSE max_people_per_order END,
        participant_count = GREATEST(IFNULL(participant_count, 0), 0),
        payment_mode = CASE WHEN IFNULL(price, 0) <= 0 THEN 'FREE' ELSE 'WECHAT' END;
 
--- 历史报名的支付真实性无法由现有代码证明，统一标记待运营核对，不自动占用新的 active_unique_key。
+-- 旧流程允许前端传 pay_status，无法证明历史支付真实性，因此统一待运营核对。
 UPDATE ldqc_competition_signup s
 LEFT JOIN ldqc_competition c ON c.id = s.competition_id
    SET s.order_no = COALESCE(NULLIF(s.order_no, ''), CONCAT('LEGACY-', s.id)),
