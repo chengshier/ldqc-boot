@@ -10,6 +10,7 @@ import org.springblade.modules.recommend.service.IRecommendService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
 
 import java.util.Map;
 
@@ -46,4 +47,12 @@ public class RecommendController extends BladeController {
     public R<Map<String, Object>> recommendToUser(@RequestParam long page, @RequestParam long limit, @RequestParam String uid) {
         return R.data(recommendService.recommendToUser(page, limit, uid));
     }
+
+	@GetMapping("/home-feed")
+	@Operation(summary = "首页混合推荐", description = "按兴趣、浏览偏好和发布时间推荐作品，并混入新闻")
+	public R<Map<String, Object>> homeFeed(@RequestParam(defaultValue = "1") long page,
+			@RequestParam(defaultValue = "20") long limit,
+			@RequestParam(required = false) Long uid) {
+		return R.data(recommendService.homeFeed(page, limit, uid));
+	}
 }

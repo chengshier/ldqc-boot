@@ -28,6 +28,7 @@ package org.springblade.modules.pointsrule.service;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import org.springblade.modules.pointsrule.pojo.entity.PointsRuleEntity;
 import org.springblade.modules.pointsrule.pojo.vo.PointsRuleVO;
+import org.springblade.modules.pointsrule.pojo.vo.PointsTaskStatusVO;
 import org.springblade.modules.pointsrule.excel.PointsRuleExcel;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.springblade.core.mp.base.BaseService;
@@ -67,6 +68,11 @@ public interface IPointsRuleService extends BaseService<PointsRuleEntity> {
 	 * 统一发豆入口（规则校验 + 统计 + 记账）
 	 */
 	String grantPointsByRule(Long userId, String ruleCode, String bizType, String bizId, String requestId, String remark);
+
+	/**
+	 * 当前登录用户任务状态汇总
+	 */
+	List<PointsTaskStatusVO> getCurrentUserTaskStatus(Long userId);
 
 }
 

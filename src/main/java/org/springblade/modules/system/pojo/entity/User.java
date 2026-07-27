@@ -207,5 +207,15 @@ private Long collectCount;
 	 */
 	private String address;
 
+	/**
+	 * 是否不再提醒完善运动爱好[0:提醒,1:不再提醒]
+	 */
+	private Integer interestRemindDisabled;
+
+	/**
+	 * 首次完成运动爱好选择时间
+	 */
+	private Date interestCompletedAt;
+
 
 }

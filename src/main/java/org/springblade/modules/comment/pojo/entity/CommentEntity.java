@@ -98,5 +98,13 @@ public class CommentEntity extends TenantEntity {
 	 */
 	@Schema(description = "回复用户ID")
 	private Long replyUid;
+	/** 审核状态：0待审核 1通过 2未通过 3异常待重试 */
+	private Byte auditStatus;
+	/** 审核说明 */
+	private String auditReason;
+	/** 审核完成时间 */
+	private Date auditTime;
+	/** 审核任务ID */
+	private Long auditTaskId;
 
 }

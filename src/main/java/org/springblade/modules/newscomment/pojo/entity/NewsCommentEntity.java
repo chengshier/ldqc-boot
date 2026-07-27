@@ -88,5 +88,11 @@ public class NewsCommentEntity extends TenantEntity {
 	 */
 	@Schema(description = "状态 0-待审核 1-已通过 2-已删除")
 	private Byte commentStatus;
+	/** 审核说明 */
+	private String auditReason;
+	/** 审核完成时间 */
+	private Date auditTime;
+	/** 审核任务ID */
+	private Long auditTaskId;
 
 }

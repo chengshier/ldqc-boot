@@ -22,4 +22,14 @@ public class BrowseRecordDTO implements Serializable {
      * 图片ID
      */
     private String imgId;
+
+    /**
+     * 浏览时长(秒)
+     */
+    private Integer browseDuration;
+
+    /**
+     * 设备标识
+     */
+    private String deviceId;
 }

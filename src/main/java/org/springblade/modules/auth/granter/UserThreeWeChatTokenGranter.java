@@ -94,44 +94,30 @@ public class UserThreeWeChatTokenGranter extends AbstractTokenGranter {
 		String sessionKey;
 		String unionid;
 
-		// MOCK LOGIC: If the code is "the code is a mock one", skip WeChat API call
-		if ("the code is a mock one".equals(code)) {
-			openid = "mock_openid_" + StringUtil.randomUUID().substring(0, 8);
-			sessionKey = "mock_session_key_" + StringUtil.randomUUID().substring(0, 8);
-			unionid = "mock_unionid_" + StringUtil.randomUUID().substring(0, 8);
-			log.info("Using MOCK mode for WeChat Login. OpenID: {}", openid);
-		} else {
-			// 1. Call WeChat API to get openid and session_key
-			Map<String, String> params = new HashMap<>();
-			params.put("appid", appId);
-			params.put("secret", appSecret);
-			params.put("code", code);
+		String responseBody;
+		try {
+			responseBody = restTemplate.getForObject(WECHAT_API_URL, String.class, appId, appSecret, code);
+		} catch (Exception e) {
+			log.error("Failed to call WeChat API", e);
+			throw new UserInvalidException("Failed to call WeChat API: " + e.getMessage());
+		}
 
-			String responseBody;
-			try {
-				responseBody = restTemplate.getForObject(WECHAT_API_URL, String.class, appId, appSecret, code);
-			} catch (Exception e) {
-				log.error("Failed to call WeChat API", e);
-				throw new UserInvalidException("Failed to call WeChat API: " + e.getMessage());
-			}
+		if (StringUtil.isBlank(responseBody)) {
+			throw new UserInvalidException("WeChat API response is empty.");
+		}
 
-			if (StringUtil.isBlank(responseBody)) {
-				throw new UserInvalidException("WeChat API response is empty.");
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			JsonNode root = mapper.readTree(responseBody);
+			if (root.has("errcode") && root.get("errcode").asInt() != 0) {
+				throw new UserInvalidException("WeChat API Error: " + root.get("errmsg").asText());
 			}
-
-			try {
-				ObjectMapper mapper = new ObjectMapper();
-				JsonNode root = mapper.readTree(responseBody);
-				if (root.has("errcode") && root.get("errcode").asInt() != 0) {
-					throw new UserInvalidException("WeChat API Error: " + root.get("errmsg").asText());
-				}
-				openid = root.get("openid").asText();
-				sessionKey = root.get("session_key").asText();
-				unionid = root.has("unionid") ? root.get("unionid").asText() : null;
-			} catch (Exception e) {
-				log.error("Failed to parse WeChat API response", e);
-				throw new UserInvalidException("Failed to parse WeChat API response.");
-			}
+			openid = root.get("openid").asText();
+			sessionKey = root.get("session_key").asText();
+			unionid = root.has("unionid") ? root.get("unionid").asText() : null;
+		} catch (Exception e) {
+			log.error("Failed to parse WeChat API response", e);
+			throw new UserInvalidException("Failed to parse WeChat API response.");
 		}
 
 		if (StringUtil.isBlank(openid)) {

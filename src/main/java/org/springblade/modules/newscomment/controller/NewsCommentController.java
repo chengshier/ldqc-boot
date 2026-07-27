@@ -26,6 +26,11 @@ import org.springblade.modules.newscomment.pojo.entity.NewsCommentEntity;
 import org.springblade.modules.newscomment.pojo.vo.NewsCommentVO;
 import org.springblade.modules.newscomment.service.INewsCommentService;
 import org.springblade.modules.newscomment.wrapper.NewsCommentWrapper;
+import org.springblade.modules.contentaudit.service.WechatContentAuditService;
+import org.springblade.modules.contentaudit.pojo.entity.ContentAuditTask;
+import org.springblade.modules.contentaudit.service.IContentAuditTaskService;
+import org.springblade.modules.usermessage.pojo.entity.UserMessage;
+import org.springblade.modules.usermessage.service.IUserMessageService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -40,6 +45,9 @@ public class NewsCommentController extends BladeController {
 
 	private final INewsCommentService newsCommentService;
 	private final INewsService newsService;
+	private final WechatContentAuditService wechatContentAuditService;
+	private final IContentAuditTaskService auditTaskService;
+	private final IUserMessageService userMessageService;
 
 	@GetMapping("/detail")
 	@ApiOperationSupport(order = 1)
@@ -134,15 +142,32 @@ public class NewsCommentController extends BladeController {
 		newsComment.setContent(newsComment.getContent().trim());
 		newsComment.setParentId(newsComment.getParentId() == null ? 0L : newsComment.getParentId());
 		newsComment.setLikeCount(newsComment.getLikeCount() == null ? 0 : newsComment.getLikeCount());
-		newsComment.setCommentStatus((byte) 1);
+		WechatContentAuditService.AuditResult auditResult = wechatContentAuditService.audit(newsComment.getUserId(), newsComment.getContent());
+		newsComment.setCommentStatus(auditResult.status());
+		newsComment.setAuditReason(auditResult.reason());
+		if (auditResult.status() == WechatContentAuditService.PASSED || auditResult.status() == WechatContentAuditService.REJECTED) {
+			newsComment.setAuditTime(new java.util.Date());
+		}
 
 		boolean saved = newsCommentService.save(newsComment);
 		if (!saved) {
 			return R.fail("comment save failed");
 		}
+		ContentAuditTask task = new ContentAuditTask();
+		task.setTenantId(newsComment.getTenantId()); task.setBizType("NEWS_COMMENT"); task.setBizId(newsComment.getId());
+		task.setUserId(newsComment.getUserId()); task.setContentSnapshot(newsComment.getContent()); task.setAuditStatus(auditResult.status());
+		task.setResultMessage(auditResult.reason()); task.setAttemptCount(1); task.setAuditTime(newsComment.getAuditTime());
+		auditTaskService.save(task);
+		newsComment.setAuditTaskId(task.getId()); newsCommentService.updateById(newsComment);
+		if (auditResult.status() == WechatContentAuditService.REJECTED) {
+			UserMessage message = new UserMessage(); message.setTenantId(newsComment.getTenantId()); message.setUserId(newsComment.getUserId());
+			message.setMessageType("COMMENT_AUDIT_REJECT"); message.setTitle("评论未通过审核"); message.setContent(auditResult.reason());
+			message.setBizType("NEWS_COMMENT"); message.setBizId(newsComment.getId()); message.setReadStatus((byte) 0);
+			userMessageService.save(message);
+		}
 
 		NewsEntity news = newsService.getById(newsComment.getNewsId());
-		if (news != null) {
+		if (news != null && auditResult.status() == WechatContentAuditService.PASSED) {
 			news.setCommentCount((news.getCommentCount() == null ? 0 : news.getCommentCount()) + 1);
 			newsService.updateById(news);
 		}

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.banneritem.mapper.BannerItemMapper">
+    <resultMap id="bannerItemResultMap" type="org.springblade.modules.banneritem.pojo.entity.BannerItemEntity">
+        <result column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="position_id" property="positionId"/>
+        <result column="title" property="title"/>
+        <result column="subtitle" property="subtitle"/>
+        <result column="description" property="description"/>
+        <result column="tag_text" property="tagText"/>
+        <result column="image_url" property="imageUrl"/>
+        <result column="jump_type" property="jumpType"/>
+        <result column="jump_value" property="jumpValue"/>
+        <result column="ext_json" property="extJson"/>
+        <result column="sort" property="sort"/>
+        <result column="status" property="status"/>
+        <result column="publish_start_time" property="publishStartTime"/>
+        <result column="publish_end_time" property="publishEndTime"/>
+        <result column="remark" property="remark"/>
+        <result column="create_user" property="createUser"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_user" property="updateUser"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="is_deleted" property="isDeleted"/>
+    </resultMap>
+
+    <select id="selectBannerItemPage" resultType="org.springblade.modules.banneritem.pojo.vo.BannerItemVO">
+        SELECT bi.id,
+               bi.tenant_id AS tenantId,
+               bi.position_id AS positionId,
+               bi.title,
+               bi.subtitle,
+               bi.description,
+               bi.tag_text AS tagText,
+               bi.image_url AS imageUrl,
+               bi.jump_type AS jumpType,
+               bi.jump_value AS jumpValue,
+               bi.ext_json AS extJson,
+               bi.sort,
+               bi.status,
+               bi.publish_start_time AS publishStartTime,
+               bi.publish_end_time AS publishEndTime,
+               bi.remark,
+               bi.create_user AS createUser,
+               bi.create_dept AS createDept,
+               bi.create_time AS createTime,
+               bi.update_user AS updateUser,
+               bi.update_time AS updateTime,
+               bi.is_deleted AS isDeleted,
+               bp.code AS positionCode,
+               bp.name AS positionName
+        FROM ldqc_banner_item bi
+        LEFT JOIN ldqc_banner_position bp ON bp.id = bi.position_id AND bp.is_deleted = 0
+        WHERE bi.is_deleted = 0
+        <if test="bannerItem != null">
+            <if test="bannerItem.positionId != null">
+                AND bi.position_id = #{bannerItem.positionId}
+            </if>
+            <if test="bannerItem.positionCode != null and bannerItem.positionCode != ''">
+                AND bp.code LIKE CONCAT('%', #{bannerItem.positionCode}, '%')
+            </if>
+            <if test="bannerItem.positionName != null and bannerItem.positionName != ''">
+                AND bp.name LIKE CONCAT('%', #{bannerItem.positionName}, '%')
+            </if>
+            <if test="bannerItem.title != null and bannerItem.title != ''">
+                AND bi.title LIKE CONCAT('%', #{bannerItem.title}, '%')
+            </if>
+            <if test="bannerItem.jumpType != null and bannerItem.jumpType != ''">
+                AND bi.jump_type = #{bannerItem.jumpType}
+            </if>
+            <if test="bannerItem.status != null">
+                AND bi.status = #{bannerItem.status}
+            </if>
+        </if>
+        ORDER BY bi.sort ASC, bi.create_time DESC
+    </select>
+
+    <select id="selectActiveByPositionCodes" resultType="org.springblade.modules.banneritem.pojo.vo.BannerItemVO">
+        SELECT bi.id,
+               bi.tenant_id AS tenantId,
+               bi.position_id AS positionId,
+               bi.title,
+               bi.subtitle,
+               bi.description,
+               bi.tag_text AS tagText,
+               bi.image_url AS imageUrl,
+               bi.jump_type AS jumpType,
+               bi.jump_value AS jumpValue,
+               bi.ext_json AS extJson,
+               bi.sort,
+               bi.status,
+               bi.publish_start_time AS publishStartTime,
+               bi.publish_end_time AS publishEndTime,
+               bi.remark,
+               bi.create_user AS createUser,
+               bi.create_dept AS createDept,
+               bi.create_time AS createTime,
+               bi.update_user AS updateUser,
+               bi.update_time AS updateTime,
+               bi.is_deleted AS isDeleted,
+               bp.code AS positionCode,
+               bp.name AS positionName
+        FROM ldqc_banner_item bi
+        INNER JOIN ldqc_banner_position bp ON bp.id = bi.position_id AND bp.is_deleted = 0
+        WHERE bi.is_deleted = 0
+          AND bi.status = 1
+          AND bp.status = 1
+          AND (bi.publish_start_time IS NULL OR bi.publish_start_time &lt;= NOW())
+          AND (bi.publish_end_time IS NULL OR bi.publish_end_time &gt;= NOW())
+        <if test="terminal != null and terminal != ''">
+            AND (bp.terminal = #{terminal} OR bp.terminal = 'all')
+        </if>
+        <if test="codes != null and codes.size() &gt; 0">
+            AND bp.code IN
+            <foreach collection="codes" item="code" open="(" separator="," close=")">
+                #{code}
+            </foreach>
+        </if>
+        ORDER BY bp.sort ASC, bi.sort ASC, bi.create_time DESC
+    </select>
+
+    <select id="exportBannerItem" resultType="org.springblade.modules.banneritem.excel.BannerItemExcel">
+        SELECT * FROM ldqc_banner_item ${ew.customSqlSegment}
+    </select>
+</mapper>

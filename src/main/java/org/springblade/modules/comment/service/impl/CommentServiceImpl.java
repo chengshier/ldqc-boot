@@ -33,11 +33,19 @@ import org.springblade.core.tool.utils.BeanUtil;
 import org.springblade.modules.agreecollect.pojo.dto.AgreeCollectDTO;
 import org.springblade.modules.agreecollect.service.IAgreeCollectService;
 import org.springblade.modules.comment.pojo.dto.CommentDTO;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorBizType;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorEventCode;
+import org.springblade.modules.pointsbehavior.service.IBehaviorFacade;
 import org.springblade.modules.comment.pojo.entity.CommentEntity;
 import org.springblade.modules.comment.pojo.vo.CommentVO;
 import org.springblade.modules.comment.excel.CommentExcel;
 import org.springblade.modules.comment.mapper.CommentMapper;
 import org.springblade.modules.comment.service.ICommentService;
+import org.springblade.modules.contentaudit.service.WechatContentAuditService;
+import org.springblade.modules.contentaudit.pojo.entity.ContentAuditTask;
+import org.springblade.modules.contentaudit.service.IContentAuditTaskService;
+import org.springblade.modules.usermessage.pojo.entity.UserMessage;
+import org.springblade.modules.usermessage.service.IUserMessageService;
 
 import org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity;
 import org.springblade.modules.imgDetail.service.IImgDetailService;
@@ -79,6 +87,14 @@ public class CommentServiceImpl extends BaseServiceImpl<CommentMapper, CommentEn
 	@Autowired
 	private RedisUtils redisUtils;
 
+	@Autowired
+	private IBehaviorFacade behaviorFacade;
+
+	@Autowired
+	private WechatContentAuditService wechatContentAuditService;
+	@Autowired private IContentAuditTaskService auditTaskService;
+	@Autowired private IUserMessageService userMessageService;
+
 	@Override
 	public IPage<CommentVO> selectCommentPage(IPage<CommentVO> page, CommentVO comment) {
 		return page.setRecords(baseMapper.selectCommentPage(page, comment));
@@ -98,7 +114,7 @@ public class CommentServiceImpl extends BaseServiceImpl<CommentMapper, CommentEn
 	@Override
 	public IPage<CommentVO> getAllOneCommentByImgId(IPage<CommentVO> page, String mid, String uid) {
 		IPage<CommentEntity> entityPage = this.page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page.getCurrent(), page.getSize()),
-			new QueryWrapper<CommentEntity>().eq("mid", mid).and(wrapper -> wrapper.isNull("pid").or().eq("pid", 0)).orderByDesc("create_time"));
+			new QueryWrapper<CommentEntity>().eq("mid", mid).eq("audit_status", 1).and(wrapper -> wrapper.isNull("pid").or().eq("pid", 0)).orderByDesc("create_time"));
 		return convertToVoPage(entityPage, page, uid);
 	}
 
@@ -110,7 +126,29 @@ public class CommentServiceImpl extends BaseServiceImpl<CommentMapper, CommentEn
 			comment.setPid(0L);
 		}
 		comment.setCount(0L);
+		WechatContentAuditService.AuditResult auditResult = wechatContentAuditService.audit(comment.getUid(), comment.getContent());
+		comment.setAuditStatus(auditResult.status());
+		comment.setAuditReason(auditResult.reason());
+		if (auditResult.status() == WechatContentAuditService.PASSED || auditResult.status() == WechatContentAuditService.REJECTED) {
+			comment.setAuditTime(new Date());
+		}
 		this.save(comment);
+		ContentAuditTask task = new ContentAuditTask();
+		task.setTenantId(comment.getTenantId()); task.setBizType("TREND_COMMENT"); task.setBizId(comment.getId());
+		task.setUserId(comment.getUid()); task.setContentSnapshot(comment.getContent()); task.setAuditStatus(auditResult.status());
+		task.setResultMessage(auditResult.reason()); task.setAttemptCount(1); task.setAuditTime(comment.getAuditTime());
+		auditTaskService.save(task);
+		comment.setAuditTaskId(task.getId()); this.updateById(comment);
+		if (auditResult.status() == WechatContentAuditService.REJECTED) {
+			UserMessage message = new UserMessage(); message.setTenantId(comment.getTenantId()); message.setUserId(comment.getUid());
+			message.setMessageType("COMMENT_AUDIT_REJECT"); message.setTitle("评论未通过审核");
+			message.setContent(auditResult.reason()); message.setBizType("TREND_COMMENT"); message.setBizId(comment.getId()); message.setReadStatus((byte) 0);
+			userMessageService.save(message);
+		}
+
+		if (auditResult.status() != WechatContentAuditService.PASSED) {
+			return convertToVo(comment, String.valueOf(commentDTO.getUid()));
+		}
 
 // 更新 ImgDetail 的评论数
 		imgDetailService.updateCommentCount(String.valueOf(comment.getMid()), 1);
@@ -135,19 +173,26 @@ public class CommentServiceImpl extends BaseServiceImpl<CommentMapper, CommentEn
 			}
 		}
 
+		Map<String, Object> ext = new HashMap<>();
+		ext.put("mid", comment.getMid());
+		ext.put("pid", comment.getPid());
+		ext.put("commentLevel", comment.getPid() == null || comment.getPid() == 0L ? 1 : 2);
+		ext.put("targetUserId", imgDetail == null ? null : imgDetail.getUserId());
+		behaviorFacade.onSuccess(BehaviorEventCode.CONTENT_COMMENT_SUCCESS, BehaviorBizType.COMMENT, String.valueOf(comment.getId()), comment.getUid(), null, ext);
+
 		return convertToVo(comment, String.valueOf(commentDTO.getUid()));
 	}
 
 	@Override
 	public IPage<CommentVO> getAllTwoCommentByOneId(IPage<CommentVO> page, String id, String uid) {
 		IPage<CommentEntity> entityPage = this.page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page.getCurrent(), page.getSize()),
-			new QueryWrapper<CommentEntity>().eq("pid", id).orderByAsc("create_time"));
+			new QueryWrapper<CommentEntity>().eq("pid", id).eq("audit_status", 1).orderByAsc("create_time"));
 		return convertToVoPage(entityPage, page, uid);
 	}
 
 	@Override
 	public List<CommentVO> getAllTwoComment(String id, String uid) {
-		List<CommentEntity> list = this.list(new QueryWrapper<CommentEntity>().eq("pid", id).orderByDesc("create_time"));
+		List<CommentEntity> list = this.list(new QueryWrapper<CommentEntity>().eq("pid", id).eq("audit_status", 1).orderByDesc("create_time"));
 		return convertToVoList(list, uid);
 	}
 
@@ -160,14 +205,14 @@ public class CommentServiceImpl extends BaseServiceImpl<CommentMapper, CommentEn
 	public IPage<CommentVO> getAllComment(IPage<CommentVO> page, String mid, String uid) {
 // Get level 1 comments
 		IPage<CommentEntity> entityPage = this.page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page.getCurrent(), page.getSize()),
-			new QueryWrapper<CommentEntity>().eq("mid", mid).and(wrapper -> wrapper.isNull("pid").or().eq("pid", 0)).orderByDesc("create_time"));
+			new QueryWrapper<CommentEntity>().eq("mid", mid).eq("audit_status", 1).and(wrapper -> wrapper.isNull("pid").or().eq("pid", 0)).orderByDesc("create_time"));
 
 		IPage<CommentVO> voPage = convertToVoPage(entityPage, page, uid);
 
 // For each level 1 comment, get one level 2 comment
 		for (CommentVO vo : voPage.getRecords()) {
 			List<CommentEntity> twoComments = this.list(new QueryWrapper<CommentEntity>()
-				.eq("pid", vo.getId())
+				.eq("pid", vo.getId()).eq("audit_status", 1)
 				.orderByDesc("create_time")
 				.last("LIMIT 1"));
 			if (twoComments != null && !twoComments.isEmpty()) {
@@ -224,14 +269,14 @@ public class CommentServiceImpl extends BaseServiceImpl<CommentMapper, CommentEn
 	@Override
 	public IPage<CommentVO> getAllTrendCommentByImage(IPage<CommentVO> page, String mid, String uid) {
 		IPage<CommentEntity> entityPage = this.page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page.getCurrent(), page.getSize()),
-			new QueryWrapper<CommentEntity>().eq("mid", mid).and(wrapper -> wrapper.isNull("pid").or().eq("pid", 0)).orderByDesc("count").orderByDesc("create_time"));
+			new QueryWrapper<CommentEntity>().eq("mid", mid).eq("audit_status", 1).and(wrapper -> wrapper.isNull("pid").or().eq("pid", 0)).orderByDesc("count").orderByDesc("create_time"));
 
 		IPage<CommentVO> voPage = convertToVoPage(entityPage, page, uid);
 
 // For each level 1 comment, get one level 2 comment
 		for (CommentVO vo : voPage.getRecords()) {
 			List<CommentEntity> twoComments = this.list(new QueryWrapper<CommentEntity>()
-				.eq("pid", vo.getId())
+				.eq("pid", vo.getId()).eq("audit_status", 1)
 				.orderByDesc("create_time")
 				.last("LIMIT 1"));
 			if (twoComments != null && !twoComments.isEmpty()) {

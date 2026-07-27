@@ -75,15 +75,15 @@ VALUES
 ON DUPLICATE KEY UPDATE status=VALUES(status), update_time=NOW();
 
 INSERT INTO user_coupon(
-  id,user_id,coupon_template_id,coupon_no,status,remain_duration_minutes,remain_times,
+  id,user_id,coupon_template_id,coupon_no,status,coupon_status,remain_duration_minutes,remain_times,
   valid_start_at,valid_end_at,locked_order_no,used_order_no,used_at,verify_merchant_user_id,verify_at,
   create_time,update_time,create_user,update_user,is_deleted,tenant_id
 )
 VALUES
-(60001,10001,40001,'UCP10001A','UNUSED',NULL,NULL,NOW(),DATE_ADD(NOW(),INTERVAL 30 DAY),NULL,NULL,NULL,NULL,NULL,NOW(),NOW(),1,1,0,'000000'),
-(60002,10001,40002,'UCP10001B','UNUSED',120,NULL,NOW(),DATE_ADD(NOW(),INTERVAL 30 DAY),NULL,NULL,NULL,NULL,NULL,NOW(),NOW(),1,1,0,'000000'),
-(60003,10001,40003,'UCP10001C','LOCKED',NULL,NULL,NOW(),DATE_ADD(NOW(),INTERVAL 20 DAY),'ORD_LOCK_001',NULL,NULL,NULL,NULL,NOW(),NOW(),1,1,0,'000000')
-ON DUPLICATE KEY UPDATE status=VALUES(status), remain_duration_minutes=VALUES(remain_duration_minutes), locked_order_no=VALUES(locked_order_no), update_time=NOW();
+(60001,10001,40001,'UCP10001A',1,'UNUSED',NULL,NULL,NOW(),DATE_ADD(NOW(),INTERVAL 30 DAY),NULL,NULL,NULL,NULL,NULL,NOW(),NOW(),1,1,0,'000000'),
+(60002,10001,40002,'UCP10001B',1,'UNUSED',120,NULL,NOW(),DATE_ADD(NOW(),INTERVAL 30 DAY),NULL,NULL,NULL,NULL,NULL,NOW(),NOW(),1,1,0,'000000'),
+(60003,10001,40003,'UCP10001C',1,'LOCKED',NULL,NULL,NOW(),DATE_ADD(NOW(),INTERVAL 20 DAY),'ORD_LOCK_001',NULL,NULL,NULL,NULL,NOW(),NOW(),1,1,0,'000000')
+ON DUPLICATE KEY UPDATE status=VALUES(status), coupon_status=VALUES(coupon_status), remain_duration_minutes=VALUES(remain_duration_minutes), locked_order_no=VALUES(locked_order_no), update_time=NOW();
 
 INSERT INTO mall_product(
   id,product_code,product_name,product_desc,product_type,cover_url,sale_points,market_amount,

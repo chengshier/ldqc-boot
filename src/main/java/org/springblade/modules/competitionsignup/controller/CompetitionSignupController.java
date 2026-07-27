@@ -34,6 +34,7 @@ import jakarta.validation.Valid;
 
 import org.springblade.core.secure.BladeUser;
 import org.springblade.core.secure.annotation.IsAdmin;
+import org.springblade.core.secure.utils.AuthUtil;
 import org.springblade.core.mp.support.Condition;
 import org.springblade.core.mp.support.Query;
 import org.springblade.core.tool.api.R;
@@ -41,6 +42,8 @@ import org.springblade.core.tool.utils.Func;
 import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springblade.modules.competitionsignup.pojo.entity.CompetitionSignupEntity;
 import org.springblade.modules.competitionsignup.pojo.vo.CompetitionSignupVO;
 import org.springblade.modules.competitionsignup.excel.CompetitionSignupExcel;
@@ -52,6 +55,7 @@ import org.springblade.core.excel.util.ExcelUtil;
 import org.springblade.core.tool.constant.BladeConstant;
 import java.util.Map;
 import java.util.List;
+import java.util.Date;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
@@ -107,7 +111,41 @@ public class CompetitionSignupController extends BladeController {
 	@ApiOperationSupport(order = 4)
 	@Operation(summary = "新增", description  = "传入competitionSignup")
 	public R save(@Valid @RequestBody CompetitionSignupEntity competitionSignup) {
+		competitionSignup.setUserId(AuthUtil.getUserId());
+		competitionSignup.setSignupTime(new Date());
 		return R.status(competitionSignupService.save(competitionSignup));
+	}
+
+	/** Mobile users can only query their own competition registrations. */
+	@GetMapping("/mobile/page")
+	@ApiOperationSupport(order = 4)
+	@Operation(summary = "我的赛事订单分页")
+	public R<IPage<CompetitionSignupVO>> mobilePage(@RequestParam(defaultValue = "1") Integer current,
+		@RequestParam(defaultValue = "20") Integer size) {
+		Long userId = AuthUtil.getUserId();
+		IPage<CompetitionSignupEntity> page = competitionSignupService.page(new Page<>(current, size),
+			new LambdaQueryWrapper<CompetitionSignupEntity>()
+				.eq(CompetitionSignupEntity::getUserId, userId)
+				.eq(CompetitionSignupEntity::getIsDeleted, 0)
+				.orderByDesc(CompetitionSignupEntity::getSignupTime));
+		page.getRecords().forEach(item -> item.setIdCard(null));
+		return R.data(CompetitionSignupWrapper.build().pageVO(page));
+	}
+
+	/** Mobile order details are ownership checked and never return another user's record. */
+	@GetMapping("/mobile/detail")
+	@ApiOperationSupport(order = 5)
+	@Operation(summary = "我的赛事订单详情")
+	public R<CompetitionSignupVO> mobileDetail(@RequestParam Long id) {
+		CompetitionSignupEntity detail = competitionSignupService.getOne(new LambdaQueryWrapper<CompetitionSignupEntity>()
+			.eq(CompetitionSignupEntity::getId, id)
+			.eq(CompetitionSignupEntity::getUserId, AuthUtil.getUserId())
+			.eq(CompetitionSignupEntity::getIsDeleted, 0));
+		if (detail == null) {
+			return R.fail("订单不存在");
+		}
+		detail.setIdCard(null);
+		return R.data(CompetitionSignupWrapper.build().entityVO(detail));
 	}
 
 	/**

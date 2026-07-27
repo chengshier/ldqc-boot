@@ -88,3 +88,8 @@ blade:
 
 #RabbitMQ配置
 #spring:
+
+media:
+  ffmpeg-path: /usr/bin/ffmpeg
+  temp-dir: /data/tmp/video-cover
+  max-video-size: 104857600

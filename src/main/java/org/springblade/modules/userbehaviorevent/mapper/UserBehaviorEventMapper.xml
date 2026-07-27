@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.userbehaviorevent.mapper.UserBehaviorEventMapper">
+
+    <select id="selectUserBehaviorEventPage" resultType="org.springblade.modules.userbehaviorevent.pojo.vo.UserBehaviorEventVO">
+        select * from user_behavior_event where is_deleted = 0 order by create_time desc
+    </select>
+
+    <select id="exportUserBehaviorEvent" resultType="org.springblade.modules.userbehaviorevent.excel.UserBehaviorEventExcel">
+        select * from user_behavior_event ${ew.customSqlSegment}
+    </select>
+
+</mapper>

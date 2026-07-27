@@ -35,6 +35,8 @@ import org.springblade.modules.couponreceivelog.pojo.entity.CouponReceiveLogEnti
 import org.springblade.modules.couponreceivelog.service.ICouponReceiveLogService;
 import org.springblade.modules.pointsaccount.pojo.entity.PointsAccountEntity;
 import org.springblade.modules.pointsaccount.service.IPointsAccountService;
+import org.springblade.modules.pointsledger.pojo.entity.PointsLedgerEntity;
+import org.springblade.modules.pointsledger.service.IPointsLedgerService;
 import org.springblade.modules.usercoupon.pojo.entity.UserCouponEntity;
 import org.springblade.modules.usercoupon.service.IUserCouponService;
 import org.springblade.core.tool.utils.Func;
@@ -62,6 +64,7 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 	private final IUserCouponService userCouponService;
 	private final ICouponReceiveLogService couponReceiveLogService;
 	private final IPointsAccountService pointsAccountService;
+	private final IPointsLedgerService pointsLedgerService;
 
 	@Override
 	public IPage<CouponTemplateVO> selectCouponTemplatePage(IPage<CouponTemplateVO> page, CouponTemplateVO couponTemplate) {
@@ -110,6 +113,38 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 			.eq(UserCouponEntity::getCouponTemplateId, templateId)
 			.eq(UserCouponEntity::getIsDeleted, 0));
 		if (template.getPerUserLimit() != null && receiveCount >= template.getPerUserLimit()) return "超过每人限领次数";
+		String effectiveRequestId = Func.isBlank(requestId) ? UUID.randomUUID().toString() : requestId;
+		if (couponReceiveLogService.count(Wrappers.<CouponReceiveLogEntity>lambdaQuery()
+			.eq(CouponReceiveLogEntity::getRequestId, effectiveRequestId)
+			.eq(CouponReceiveLogEntity::getIsDeleted, 0)) > 0) return "请勿重复提交";
+
+		boolean reserved = this.update(Wrappers.<CouponTemplateEntity>lambdaUpdate()
+			.eq(CouponTemplateEntity::getId, templateId)
+			.eq(CouponTemplateEntity::getStatus, 1)
+			.gt(CouponTemplateEntity::getRemainStock, 0)
+			.setSql("remain_stock = remain_stock - 1"));
+		if (!reserved) return "库存不足";
+		int costPoints = "POINTS_EXCHANGE".equalsIgnoreCase(template.getAcquireType()) ? Math.max(template.getCostPoints() == null ? 0 : template.getCostPoints(), 0) : 0;
+		if (costPoints > 0) {
+			boolean deducted = pointsAccountService.update(Wrappers.<PointsAccountEntity>lambdaUpdate()
+				.eq(PointsAccountEntity::getUserId, userId)
+				.ge(PointsAccountEntity::getAvailablePoints, costPoints)
+				.setSql("available_points = available_points - " + costPoints + ", total_spent_points = total_spent_points + " + costPoints + ", version = version + 1"));
+			if (!deducted) throw new IllegalStateException("绿豆不足");
+			PointsAccountEntity updated = pointsAccountService.getOne(Wrappers.<PointsAccountEntity>lambdaQuery().eq(PointsAccountEntity::getUserId, userId));
+			PointsLedgerEntity ledger = new PointsLedgerEntity();
+			ledger.setUserId(userId);
+			ledger.setChangeType("SPEND");
+			ledger.setChangePoints(-costPoints);
+			ledger.setBeforePoints(updated.getAvailablePoints() + costPoints);
+			ledger.setAfterPoints(updated.getAvailablePoints());
+			ledger.setRuleCode("COUPON_POINTS_EXCHANGE");
+			ledger.setBizType("couponExchange");
+			ledger.setBizId(String.valueOf(templateId));
+			ledger.setRequestId(effectiveRequestId);
+			ledger.setRemark("兑换优惠券：" + template.getCouponName());
+			pointsLedgerService.save(ledger);
+		}
 
 		Date now = new Date();
 		Date endAt = template.getValidEndAt();
@@ -137,13 +172,8 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 		userCoupon.setValidEndAt(endAt);
 		userCouponService.save(userCoupon);
 
-		this.update(Wrappers.<CouponTemplateEntity>lambdaUpdate()
-			.eq(CouponTemplateEntity::getId, templateId)
-			.gt(CouponTemplateEntity::getRemainStock, 0)
-			.setSql("remain_stock = remain_stock - 1"));
-
 		CouponReceiveLogEntity log = new CouponReceiveLogEntity();
-		log.setRequestId(Func.isBlank(requestId) ? UUID.randomUUID().toString() : requestId);
+		log.setRequestId(effectiveRequestId);
 		log.setUserId(userId);
 		log.setCouponTemplateId(templateId);
 		log.setReceiveChannel("APP");

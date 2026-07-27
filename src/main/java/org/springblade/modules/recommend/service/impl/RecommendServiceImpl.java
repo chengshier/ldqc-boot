@@ -19,6 +19,10 @@ import org.springblade.modules.recommend.service.IRecommendService;
 
 import org.springblade.modules.system.pojo.entity.User;
 import org.springblade.modules.system.service.IUserService;
+import org.springblade.modules.news.pojo.entity.NewsEntity;
+import org.springblade.modules.news.service.INewsService;
+import org.springblade.modules.userinterest.service.IUserInterestService;
+import org.springblade.modules.userinterest.pojo.entity.UserInterestEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -47,6 +51,10 @@ public class RecommendServiceImpl implements IRecommendService {
 	private IUserService userService;
 @Autowired
     private IAgreeCollectService agreeCollectService;
+	@Autowired
+	private INewsService newsService;
+	@Autowired
+	private IUserInterestService userInterestService;
 
     @Override
     public Map<String, Object> recommendToUserByCF(long page, long limit, String uid) {
@@ -134,6 +142,96 @@ public class RecommendServiceImpl implements IRecommendService {
         // Placeholder for ML recommendation - defaulting to CF for now
         return recommendToUserByCF(page, limit, uid);
     }
+
+	@Override
+	public Map<String, Object> homeFeed(long page, long limit, Long userId) {
+		long safePage = Math.max(page, 1);
+		long safeLimit = Math.min(Math.max(limit, 1), 50);
+		Set<Long> interestIds = userId == null ? Collections.emptySet() : userInterestService.listByUserId(userId).stream()
+			.map(UserInterestEntity::getCategoryId).collect(Collectors.toSet());
+		Set<Long> browseCategoryIds = recentBrowseCategories(userId);
+		List<ImgDetailEntity> contents = imgDetailService.list(new QueryWrapper<ImgDetailEntity>()
+			.eq("status", 1).orderByDesc("create_time").last("LIMIT 300"));
+		contents.sort((left, right) -> Double.compare(contentScore(right, interestIds, browseCategoryIds), contentScore(left, interestIds, browseCategoryIds)));
+		Map<Long, ImgDetailVO> contentVoMap = populateUserInfo(contents, userId == null ? null : String.valueOf(userId)).stream()
+			.collect(Collectors.toMap(ImgDetailVO::getId, value -> value, (left, right) -> left));
+		List<NewsEntity> news = newsService.list(new QueryWrapper<NewsEntity>()
+			.eq("news_status", 1).orderByDesc("is_top").orderByDesc("publish_time").last("LIMIT 100"));
+
+		long requiredSize = Math.min(safePage * safeLimit, 300);
+		List<Map<String, Object>> feed = new ArrayList<>();
+		int contentIndex = 0;
+		int newsIndex = 0;
+		int desiredNews = Math.max(1, (int) Math.round(safeLimit * 0.2));
+		while (feed.size() < requiredSize && (contentIndex < contents.size() || newsIndex < news.size())) {
+			boolean insertNews = newsIndex < news.size() && (feed.size() + 1) % Math.max(1, safeLimit / desiredNews) == 0;
+			if (insertNews || contentIndex >= contents.size()) {
+				feed.add(newsItem(news.get(newsIndex++)));
+			} else {
+				ImgDetailVO content = contentVoMap.get(contents.get(contentIndex++).getId());
+				if (content != null) feed.add(contentItem(content));
+			}
+		}
+		int from = (int) Math.min((safePage - 1) * safeLimit, feed.size());
+		int to = (int) Math.min(from + safeLimit, feed.size());
+		Map<String, Object> result = new HashMap<>();
+		result.put("records", feed.subList(from, to));
+		result.put("total", contents.size() + news.size());
+		return result;
+	}
+
+	private Set<Long> recentBrowseCategories(Long userId) {
+		if (userId == null || !redisUtils.hasKey(RecommendConstant.BR_IMG_KEY + userId)) return Collections.emptySet();
+		return redisUtils.lRange(RecommendConstant.BR_IMG_KEY + userId, 0, 19).stream().map(value -> {
+			try { return JSON.parseObject(value, ImgDetailVO.class); } catch (Exception ignored) { return null; }
+		}).filter(Objects::nonNull).map(ImgDetailVO::getCategoryPid).filter(Objects::nonNull).collect(Collectors.toSet());
+	}
+
+	private double contentScore(ImgDetailEntity item, Set<Long> interests, Set<Long> browseCategories) {
+		double score = 0;
+		Long categoryId = item.getCategoryPid() == null ? item.getCategoryId() : item.getCategoryPid();
+		if (interests.contains(categoryId)) score += 60;
+		if (browseCategories.contains(categoryId)) score += 25;
+		if (item.getCreateTime() != null) {
+			long ageDays = Math.max(0, (System.currentTimeMillis() - item.getCreateTime().getTime()) / 86400000L);
+			score += Math.max(0, 15 - ageDays);
+		}
+		return score;
+	}
+
+	private Map<String, Object> contentItem(ImgDetailVO vo) {
+		Map<String, Object> data = new HashMap<>();
+		data.put("itemType", "CONTENT");
+		data.put("id", "content:" + vo.getId());
+		data.put("contentId", vo.getId());
+		data.put("content", vo.getContent());
+		data.put("cover", vo.getCover());
+		data.put("posterUrl", vo.getPosterUrl());
+		data.put("mediaType", vo.getMediaType());
+		data.put("imgsUrl", vo.getImgsUrl());
+		data.put("username", vo.getUsername());
+		data.put("avatar", vo.getAvatar());
+		data.put("userId", vo.getUserId());
+		data.put("agreeCount", vo.getAgreeCount());
+		data.put("isAgree", vo.getIsAgree());
+		data.put("createTime", vo.getCreateTime());
+		return data;
+	}
+
+	private Map<String, Object> newsItem(NewsEntity item) {
+		Map<String, Object> data = new HashMap<>();
+		data.put("itemType", "NEWS");
+		data.put("id", "news:" + item.getId());
+		data.put("newsId", item.getId());
+		data.put("title", item.getTitle());
+		data.put("content", item.getAbstracts());
+		data.put("cover", item.getCover());
+		data.put("username", item.getUsername() == null ? "绿动资讯" : item.getUsername());
+		data.put("agreeCount", item.getAgreeCount());
+		data.put("publishTime", item.getPublishTime());
+		data.put("tag", "资讯");
+		return data;
+	}
 
     private List<ImgDetailVO> populateUserInfo(List<ImgDetailEntity> list, String uid) {
         List<ImgDetailVO> voList = BeanUtil.copy(list, ImgDetailVO.class);

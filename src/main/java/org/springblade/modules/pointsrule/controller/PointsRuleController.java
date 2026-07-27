@@ -44,6 +44,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.springblade.modules.pointsrule.pojo.entity.PointsRuleEntity;
 import org.springblade.modules.pointsrule.pojo.vo.PointsRuleVO;
+import org.springblade.modules.pointsrule.pojo.vo.PointsTaskStatusVO;
 import org.springblade.modules.pointsrule.excel.PointsRuleExcel;
 import org.springblade.modules.pointsrule.wrapper.PointsRuleWrapper;
 import org.springblade.modules.pointsrule.service.IPointsRuleService;
@@ -159,8 +160,15 @@ public class PointsRuleController extends BladeController {
 		ExcelUtil.export(response, "积分规则数据" + DateUtil.time(), "积分规则数据表", list, PointsRuleExcel.class);
 	}
 
+	@GetMapping("/task-status")
+	@ApiOperationSupport(order = 11)
+	@Operation(summary = "当前用户任务状态", description  = "返回当前登录用户的绿豆任务完成状态")
+	public R<List<PointsTaskStatusVO>> taskStatus() {
+		return R.data(pointsRuleService.getCurrentUserTaskStatus(AuthUtil.getUserId()));
+	}
+
 	@PostMapping("/sign-in")
-	@ApiOperationSupport(order = 10)
+	@ApiOperationSupport(order = 12)
 	@Operation(summary = "签到领豆", description  = "当前登录用户签到并领取绿豆")
 	public R<String> signIn() {
 		String result = pointsRuleService.signIn(AuthUtil.getUserId());

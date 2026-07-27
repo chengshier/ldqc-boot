@@ -28,7 +28,7 @@ public class UserCouponEntity extends TenantEntity {
 	@Schema(description = "券号")
 	private String couponNo;
 
-	@TableField("status")
+	@TableField("coupon_status")
 	@Schema(description = "券状态 UNUSED/LOCKED/USED/EXPIRED/INVALID")
 	private String couponStatus;
 

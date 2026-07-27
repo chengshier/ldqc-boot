@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.springblade.modules.pointsrulecondition.mapper.PointsRuleConditionMapper">
+
+    <select id="selectPointsRuleConditionPage" resultType="org.springblade.modules.pointsrulecondition.pojo.vo.PointsRuleConditionVO">
+        select * from points_rule_condition where is_deleted = 0 order by rule_code asc, condition_group asc, sort asc, id asc
+    </select>
+
+    <select id="exportPointsRuleCondition" resultType="org.springblade.modules.pointsrulecondition.excel.PointsRuleConditionExcel">
+        select * from points_rule_condition ${ew.customSqlSegment}
+    </select>
+
+</mapper>

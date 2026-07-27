@@ -25,5 +25,7 @@ public interface IRecommendService {
      * @param uid
      * @return
      */
-    Map<String, Object> recommendToUser(long page, long limit, String uid);
+	Map<String, Object> recommendToUser(long page, long limit, String uid);
+
+	Map<String, Object> homeFeed(long page, long limit, Long userId);
 }

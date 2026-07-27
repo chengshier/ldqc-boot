@@ -20,6 +20,9 @@ import org.springblade.modules.albumimgrelation.service.IAlbumImgRelationService
 import org.springblade.modules.category.pojo.entity.CategoryEntity;
 import org.springblade.modules.category.service.ICategoryService;
 import org.springblade.modules.imgDetail.mapper.ImgDetailMapper;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorBizType;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorEventCode;
+import org.springblade.modules.pointsbehavior.service.IBehaviorFacade;
 import org.springblade.modules.imgDetail.pojo.dto.BrowseRecordDTO;
 import org.springblade.modules.imgDetail.pojo.dto.ImgDetailDTO;
 import org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity;
@@ -87,6 +90,9 @@ public class ImgDetailServiceImpl extends BaseServiceImpl<ImgDetailMapper, ImgDe
 
     @Autowired
     private IUserAuthTypeService userAuthTypeService;
+
+    @Autowired
+    private IBehaviorFacade behaviorFacade;
 
     @Override
     public IPage<ImgDetailVO> getPage(IPage<ImgDetailVO> page) {
@@ -173,6 +179,12 @@ public class ImgDetailServiceImpl extends BaseServiceImpl<ImgDetailMapper, ImgDe
 
         redisUtils.hPut(PlatformConstant.IMG_DETAIL_LIST_KEY, String.valueOf(imgDetail.getId()), JSON.toJSONString(imgDetail));
 
+        Map<String, Object> ext = new HashMap<>();
+        ext.put("categoryId", imgDetail.getCategoryId());
+        ext.put("mediaType", imgDetailDTO.getMediaType());
+        ext.put("tagCount", imgDetailDTO.getTags() == null ? 0 : imgDetailDTO.getTags().size());
+        behaviorFacade.onSuccess(BehaviorEventCode.CONTENT_PUBLISH_SUCCESS, BehaviorBizType.IMG_DETAIL, String.valueOf(imgDetail.getId()), imgDetail.getUserId(), null, ext);
+
         return imgDetail.getId();
     }
 
@@ -223,6 +235,12 @@ public class ImgDetailServiceImpl extends BaseServiceImpl<ImgDetailMapper, ImgDe
             populateUserInfo(Collections.singletonList(vo));
             populateCategoryInfo(Collections.singletonList(vo));
             redisUtils.lLeftPush(key, JSON.toJSONString(vo));
+
+            Map<String, Object> ext = new HashMap<>();
+            ext.put("browseDuration", browseRecordDTO.getBrowseDuration());
+            ext.put("deviceId", browseRecordDTO.getDeviceId());
+            ext.put("authorUserId", entity.getUserId());
+            behaviorFacade.onSuccess(BehaviorEventCode.CONTENT_BROWSE_SUCCESS, BehaviorBizType.IMG_DETAIL, String.valueOf(entity.getId()), Long.valueOf(browseRecordDTO.getUserId()), null, ext);
         }
     }
 

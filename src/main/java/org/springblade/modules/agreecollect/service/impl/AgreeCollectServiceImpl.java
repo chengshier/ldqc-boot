@@ -45,6 +45,9 @@ import org.springblade.modules.album.pojo.entity.AlbumEntity;
 import org.springblade.modules.album.service.IAlbumService;
 import org.springblade.modules.albumimgrelation.pojo.entity.AlbumImgRelationEntity;
 import org.springblade.modules.albumimgrelation.service.IAlbumImgRelationService;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorBizType;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorEventCode;
+import org.springblade.modules.pointsbehavior.service.IBehaviorFacade;
 import org.springblade.modules.comment.pojo.entity.CommentEntity;
 import org.springblade.modules.comment.pojo.vo.CommentVO;
 import org.springblade.modules.comment.service.ICommentService;
@@ -117,6 +120,9 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 	@Lazy
 	private IAlbumImgRelationService albumImgRelationService;
 
+	@Autowired
+	private IBehaviorFacade behaviorFacade;
+
 	@Override
 	@Transactional(rollbackFor = Exception.class)
 	public void agree(AgreeCollectDTO agreeCollectDTO) {
@@ -164,6 +170,20 @@ public class AgreeCollectServiceImpl extends BaseServiceImpl<AgreeCollectMapper,
 
 		// 更改用户记录表
 		agreeCollectNotice(agreeCollectDTO, agreeCollect);
+
+		if (agreeCollectDTO.getType() == 0 || agreeCollectDTO.getType() == 1) {
+			Map<String, Object> ext = new HashMap<>();
+			ext.put("type", agreeCollectDTO.getType());
+			ext.put("targetUserId", agreeCollectDTO.getAgreeCollectUid());
+			behaviorFacade.onSuccess(
+				BehaviorEventCode.CONTENT_LIKE_SUCCESS,
+				agreeCollectDTO.getType() == 0 ? BehaviorBizType.COMMENT : BehaviorBizType.IMG_DETAIL,
+				String.valueOf(agreeCollect.getAgreeCollectId()),
+				agreeCollect.getUid(),
+				null,
+				ext
+			);
+		}
 	}
 
 

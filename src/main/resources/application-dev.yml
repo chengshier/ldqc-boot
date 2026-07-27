@@ -124,3 +124,9 @@ elasticsearch:
 #        prefetch: 1
 #        concurrency: 3
 #        acknowledge-mode: manual
+
+
+media:
+  ffmpeg-path: F:\softwore\ffmpeg-8.1.2-essentials_build\bin\ffmpeg.exe
+  temp-dir: F:\softwore\ffmpeg\file
+  max-video-size: 104857600

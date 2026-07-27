@@ -13,6 +13,7 @@ import org.springblade.core.mp.support.Condition;
 import org.springblade.core.mp.support.Query;
 import org.springblade.core.tool.api.R;
 import org.springblade.core.tool.utils.Func;
+import org.springblade.modules.mediaUtil.VideoCoverGenerateTool;
 import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -29,6 +30,8 @@ import java.util.Map;
 import java.util.List;
 import jakarta.servlet.http.HttpServletResponse;
 
+import static io.jsonwebtoken.lang.Strings.hasText;
+
 /**
  * 图片详情表 控制器
  *
@@ -42,6 +45,8 @@ import jakarta.servlet.http.HttpServletResponse;
 public class ImgDetailController extends BladeController {
 
     private final IImgDetailService imgDetailService;
+
+	private final VideoCoverGenerateTool videoCoverGenerateTool;
 
     // --- BladeX Standard Methods ---
 
@@ -87,7 +92,20 @@ public class ImgDetailController extends BladeController {
     @ApiOperationSupport(order = 6)
     @Operation(summary = "新增或修改", description  = "传入imgDetail")
     public R submit(@Valid @RequestBody ImgDetailEntity imgDetail) {
-        return R.status(imgDetailService.saveOrUpdate(imgDetail));
+
+		boolean needGeneratePoster = shouldGenerateVideoPoster(imgDetail);
+		boolean success = imgDetailService.saveOrUpdate(imgDetail);
+
+		if (success && needGeneratePoster && imgDetail.getId() != null) {
+			ImgDetailEntity taskArticle = new ImgDetailEntity();
+			taskArticle.setId(imgDetail.getId());
+			taskArticle.setMediaUrl(imgDetail.getMediaUrl());
+			taskArticle.setMediaType(imgDetail.getMediaType());
+			taskArticle.setPosterUrl(imgDetail.getPosterUrl());
+			taskArticle.setCover(imgDetail.getCover());
+			videoCoverGenerateTool.generateCoverAsync(taskArticle);
+		}
+        return R.status(success);
     }
 
     @PostMapping("/remove")
@@ -136,7 +154,17 @@ public class ImgDetailController extends BladeController {
     @ApiOperationSupport(order = 12)
     @Operation(summary = "发布图片", description = "传入imgDetail")
     public R<Long> publish(@RequestBody ImgDetailDTO imgDetail) {
-        return R.data(imgDetailService.publish(imgDetail));
+        Long id = imgDetailService.publish(imgDetail);
+        if (id != null && isVideoMedia(imgDetail.getMediaType(), imgDetail.getMediaUrl())
+            && !hasUsableImageUrl(imgDetail.getPosterUrl()) && !hasUsableImageUrl(imgDetail.getCover())) {
+            ImgDetailEntity taskArticle = new ImgDetailEntity();
+            taskArticle.setId(id);
+            taskArticle.setMediaType(imgDetail.getMediaType());
+            taskArticle.setMediaUrl(imgDetail.getMediaUrl());
+            // 发布接口与后台提交接口都使用同一套异步截帧逻辑。
+            videoCoverGenerateTool.generateCoverAsync(taskArticle);
+        }
+        return R.data(id);
     }
 
     @PostMapping("/deleteImgs")
@@ -156,4 +184,36 @@ public class ImgDetailController extends BladeController {
          IPage<ImgDetailVO> page = Condition.getPage(query);
          return R.data(imgDetailService.searchImgDetail(page.getCurrent(), page.getSize(), "", 1));
     }
+
+	private boolean shouldGenerateVideoPoster(ImgDetailEntity imgDetail) {
+		if (imgDetail == null) {
+			return false;
+		}
+		if (!isVideoMedia(imgDetail.getMediaType(), imgDetail.getMediaUrl())) {
+			return false;
+		}
+		if (!hasText(imgDetail.getMediaUrl())) {
+			return false;
+		}
+		return !hasUsableImageUrl(imgDetail.getPosterUrl()) && !hasUsableImageUrl(imgDetail.getCover());
+	}
+
+	private boolean isVideoMedia(String mediaType, String mediaUrl) {
+		if (hasText(mediaType) && "video".equalsIgnoreCase(mediaType.trim())) {
+			return true;
+		}
+		return looksLikeVideoUrl(mediaUrl);
+	}
+
+	private boolean hasUsableImageUrl(String url) {
+		return hasText(url) && !looksLikeVideoUrl(url);
+	}
+
+	private boolean looksLikeVideoUrl(String url) {
+		if (!hasText(url)) {
+			return false;
+		}
+		String lower = url.trim().toLowerCase();
+		return lower.contains(".mp4") || lower.contains(".mov") || lower.contains(".avi") || lower.contains(".mkv") || lower.contains(".m4v") || lower.contains(".webm") || lower.contains(".m3u8");
+	}
 }

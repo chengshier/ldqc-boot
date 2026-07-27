@@ -8,6 +8,9 @@ import org.springblade.core.log.exception.ServiceException;
 import org.springblade.core.mp.base.BaseServiceImpl;
 import org.springblade.core.secure.utils.AuthUtil;
 import org.springblade.core.tool.utils.Func;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorBizType;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorEventCode;
+import org.springblade.modules.pointsbehavior.service.IBehaviorFacade;
 import org.springblade.modules.sportinvite.excel.SportInviteExcel;
 import org.springblade.modules.sportinvite.mapper.SportInviteMapper;
 import org.springblade.modules.sportinvite.pojo.entity.SportInviteEntity;
@@ -21,9 +24,7 @@ import org.springblade.modules.sportinviteapply.service.ISportInviteApplyService
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * 运动邀约表 服务实现类
@@ -37,6 +38,7 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 
 	private final ISportInviteApplyService sportInviteApplyService;
 	private final ISportInviteAuditLogService sportInviteAuditLogService;
+	private final IBehaviorFacade behaviorFacade;
 
 	@Override
 	public IPage<SportInviteVO> selectSportInvitePage(IPage<SportInviteVO> page, SportInviteVO sportInvite) {
@@ -100,7 +102,15 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 		if (sportInvite.getNeedAudit() == null) sportInvite.setNeedAudit(1);
 		if (Func.isBlank(sportInvite.getContactVisibleRule())) sportInvite.setContactVisibleRule("APPROVED_ONLY");
 		if (sportInvite.getStatus() == null) sportInvite.setStatus(1);
-		return this.saveOrUpdate(sportInvite);
+		boolean saved = this.saveOrUpdate(sportInvite);
+		if (saved) {
+			Map<String, Object> ext = new HashMap<>();
+			ext.put("sportType", sportInvite.getSportType());
+			ext.put("needAudit", sportInvite.getNeedAudit());
+			ext.put("publisherUserId", userId);
+			behaviorFacade.onSuccess(BehaviorEventCode.INVITE_PUBLISH_SUCCESS, BehaviorBizType.SPORT_INVITE, String.valueOf(sportInvite.getId()), userId, null, ext);
+		}
+		return saved;
 	}
 
 	@Override
@@ -135,6 +145,14 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 		boolean saved = sportInviteApplyService.save(apply);
 		if (saved && "APPROVED".equals(apply.getApplyStatus())) {
 			increasePeople(invite);
+		}
+		if (saved) {
+			Map<String, Object> ext = new java.util.HashMap<>();
+			ext.put("inviteId", apply.getInviteId());
+			ext.put("applyStatus", apply.getApplyStatus());
+			ext.put("needAudit", invite.getNeedAudit());
+			ext.put("publisherUserId", invite.getPublisherUserId());
+			behaviorFacade.onSuccess(BehaviorEventCode.INVITE_APPLY_SUCCESS, BehaviorBizType.SPORT_INVITE_APPLY, String.valueOf(apply.getId()), userId, null, ext);
 		}
 		return saved;
 	}
@@ -202,6 +220,14 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 		log.setAuditRemark(auditRemark);
 		log.setStatus(1);
 		sportInviteAuditLogService.save(log);
+		if (updated && "APPROVE".equals(auditAction)) {
+			Map<String, Object> ext = new HashMap<>();
+			ext.put("inviteId", apply.getInviteId());
+			ext.put("applyId", apply.getId());
+			ext.put("auditUserId", userId);
+			ext.put("publisherUserId", invite.getPublisherUserId());
+			behaviorFacade.onSuccess(BehaviorEventCode.INVITE_APPLY_APPROVED, BehaviorBizType.SPORT_INVITE_APPLY, String.valueOf(apply.getId()), apply.getApplicantUserId(), null, ext);
+		}
 		return updated;
 	}
 

@@ -26,8 +26,13 @@
 package org.springblade.modules.pointsrule.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import org.springblade.modules.pointsbehavior.pojo.dto.BehaviorAwardResult;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorBizType;
+import org.springblade.modules.pointsbehavior.pojo.enums.BehaviorEventCode;
+import org.springblade.modules.pointsbehavior.service.IBehaviorFacade;
 import org.springblade.modules.pointsrule.pojo.entity.PointsRuleEntity;
 import org.springblade.modules.pointsrule.pojo.vo.PointsRuleVO;
+import org.springblade.modules.pointsrule.pojo.vo.PointsTaskStatusVO;
 import org.springblade.modules.pointsrule.excel.PointsRuleExcel;
 import org.springblade.modules.pointsrule.mapper.PointsRuleMapper;
 import org.springblade.modules.pointsrule.service.IPointsRuleService;
@@ -43,6 +48,8 @@ import org.springblade.modules.pointstasklog.pojo.entity.PointsTaskLogEntity;
 import org.springblade.modules.pointstasklog.service.IPointsTaskLogService;
 import org.springblade.core.tool.utils.Func;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -52,6 +59,10 @@ import java.util.List;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 用户认证类型表 服务实现类
@@ -68,6 +79,10 @@ public class PointsRuleServiceImpl extends BaseServiceImpl<PointsRuleMapper, Poi
 	private final IPointsSigninStatService pointsSigninStatService;
 	private final IPointsTaskLogService pointsTaskLogService;
 	private final IPointsDailyCounterService pointsDailyCounterService;
+
+	@Autowired
+	@Lazy
+	private IBehaviorFacade behaviorFacade;
 
 	@Override
 	public IPage<PointsRuleVO> selectPointsRulePage(IPage<PointsRuleVO> page, PointsRuleVO pointsRule) {
@@ -136,47 +151,148 @@ public class PointsRuleServiceImpl extends BaseServiceImpl<PointsRuleMapper, Poi
 			continueDays = 1;
 		}
 
-		String dayKey = dayKey(today);
-		String grantMsg = grantPointsByRule(
-			userId,
-			"DAILY_SIGNIN",
-			"SIGNIN",
-			"SIGNIN_" + dayKey,
-			"REQ_SIGNIN_" + userId + "_" + dayKey,
-			"每日签到奖励"
-		);
-		if (!grantMsg.startsWith("发放成功")) {
-			return grantMsg;
-		}
-		int reward = extractPoints(grantMsg);
-
-		if (continueDays % 30 == 0) {
-			String streak30 = grantPointsByRule(
-				userId,
-				"SIGNIN_STREAK_30",
-				"SIGNIN",
-				"SIGNIN_STREAK_30_" + dayKey,
-				"REQ_SIGNIN_STREAK30_" + userId + "_" + dayKey,
-				"连续签到30天奖励"
-			);
-			if (streak30.startsWith("发放成功")) reward += extractPoints(streak30);
-		} else if (continueDays % 7 == 0) {
-			String streak7 = grantPointsByRule(
-				userId,
-				"SIGNIN_STREAK_7",
-				"SIGNIN",
-				"SIGNIN_STREAK_7_" + dayKey,
-				"REQ_SIGNIN_STREAK7_" + userId + "_" + dayKey,
-				"连续签到7天奖励"
-			);
-			if (streak7.startsWith("发放成功")) reward += extractPoints(streak7);
-		}
-
+		int monthSigninDays = (stat.getMonthSigninDays() == null ? 0 : stat.getMonthSigninDays()) + 1;
 		stat.setLastSigninDate(today);
 		stat.setContinueDays(continueDays);
-		stat.setMonthSigninDays((stat.getMonthSigninDays() == null ? 0 : stat.getMonthSigninDays()) + 1);
+		stat.setMonthSigninDays(monthSigninDays);
 		pointsSigninStatService.updateById(stat);
-		return "签到成功+" + reward + "绿豆";
+
+		String dayKey = dayKey(today);
+		java.util.Map<String, Object> ext = new java.util.HashMap<>();
+		ext.put("continueDays", continueDays);
+		ext.put("monthSigninDays", monthSigninDays);
+		ext.put("signDate", dayKey);
+
+		BehaviorAwardResult dailyResult = behaviorFacade.onSuccessWithResult(
+			BehaviorEventCode.DAILY_SIGNIN_SUCCESS,
+			BehaviorBizType.SIGNIN,
+			"SIGNIN_" + dayKey,
+			userId,
+			"REQ_SIGNIN_" + userId + "_" + dayKey,
+			ext
+		);
+		int reward = dailyResult == null || dailyResult.getGrantedPoints() == null ? 0 : dailyResult.getGrantedPoints();
+
+		if (continueDays % 30 == 0) {
+			BehaviorAwardResult streak30 = behaviorFacade.onSuccessWithResult(
+				BehaviorEventCode.SIGNIN_STREAK_30_SUCCESS,
+				BehaviorBizType.SIGNIN,
+				"SIGNIN_STREAK_30_" + dayKey,
+				userId,
+				"REQ_SIGNIN_STREAK30_" + userId + "_" + dayKey,
+				ext
+			);
+			reward += streak30 == null || streak30.getGrantedPoints() == null ? 0 : streak30.getGrantedPoints();
+		} else if (continueDays % 7 == 0) {
+			BehaviorAwardResult streak7 = behaviorFacade.onSuccessWithResult(
+				BehaviorEventCode.SIGNIN_STREAK_7_SUCCESS,
+				BehaviorBizType.SIGNIN,
+				"SIGNIN_STREAK_7_" + dayKey,
+				userId,
+				"REQ_SIGNIN_STREAK7_" + userId + "_" + dayKey,
+				ext
+			);
+			reward += streak7 == null || streak7.getGrantedPoints() == null ? 0 : streak7.getGrantedPoints();
+		}
+
+		return reward > 0 ? "签到成功+" + reward + "绿豆" : "签到成功";
+	}
+
+	@Override
+	public List<PointsTaskStatusVO> getCurrentUserTaskStatus(Long userId) {
+		if (userId == null) {
+			return java.util.Collections.emptyList();
+		}
+		List<PointsRuleEntity> activeRules = this.list(Wrappers.<PointsRuleEntity>lambdaQuery()
+			.eq(PointsRuleEntity::getStatus, 1)
+			.eq(PointsRuleEntity::getIsDeleted, 0)
+			.orderByAsc(PointsRuleEntity::getId));
+		if (activeRules == null || activeRules.isEmpty()) {
+			return java.util.Collections.emptyList();
+		}
+
+		Set<String> ruleCodes = activeRules.stream()
+			.map(PointsRuleEntity::getRuleCode)
+			.filter(Func::isNotBlank)
+			.collect(Collectors.toSet());
+
+		Date today = dayStart(new Date());
+		List<PointsTaskLogEntity> todayLogs = pointsTaskLogService.list(Wrappers.<PointsTaskLogEntity>lambdaQuery()
+			.eq(PointsTaskLogEntity::getUserId, userId)
+			.in(!ruleCodes.isEmpty(), PointsTaskLogEntity::getRuleCode, ruleCodes)
+			.ge(PointsTaskLogEntity::getCreateTime, today)
+			.eq(PointsTaskLogEntity::getIsDeleted, 0));
+		List<PointsTaskLogEntity> historyLogs = pointsTaskLogService.list(Wrappers.<PointsTaskLogEntity>lambdaQuery()
+			.eq(PointsTaskLogEntity::getUserId, userId)
+			.in(!ruleCodes.isEmpty(), PointsTaskLogEntity::getRuleCode, ruleCodes)
+			.eq(PointsTaskLogEntity::getIsDeleted, 0));
+
+		Map<String, Long> todayCountMap = todayLogs.stream().collect(Collectors.groupingBy(PointsTaskLogEntity::getRuleCode, Collectors.counting()));
+		Map<String, Long> historyCountMap = historyLogs.stream().collect(Collectors.groupingBy(PointsTaskLogEntity::getRuleCode, Collectors.counting()));
+
+		List<PointsLedgerEntity> todayLedgers = pointsLedgerService.list(Wrappers.<PointsLedgerEntity>lambdaQuery()
+			.eq(PointsLedgerEntity::getUserId, userId)
+			.in(!ruleCodes.isEmpty(), PointsLedgerEntity::getRuleCode, ruleCodes)
+			.ge(PointsLedgerEntity::getCreateTime, today)
+			.eq(PointsLedgerEntity::getIsDeleted, 0));
+		Map<String, Integer> todayPointsMap = new HashMap<>();
+		for (PointsLedgerEntity ledger : todayLedgers) {
+			String code = ledger.getRuleCode();
+			todayPointsMap.put(code, todayPointsMap.getOrDefault(code, 0) + Func.toInt(ledger.getChangePoints(), 0));
+		}
+
+		PointsSigninStatEntity signStat = pointsSigninStatService.getOne(Wrappers.<PointsSigninStatEntity>lambdaQuery()
+			.eq(PointsSigninStatEntity::getUserId, userId)
+			.eq(PointsSigninStatEntity::getIsDeleted, 0)
+			.last("limit 1"));
+		boolean signedToday = signStat != null && signStat.getLastSigninDate() != null && dayStart(signStat.getLastSigninDate()).equals(today);
+		int continueDays = signStat == null ? 0 : Func.toInt(signStat.getContinueDays(), 0);
+		int monthSigninDays = signStat == null ? 0 : Func.toInt(signStat.getMonthSigninDays(), 0);
+
+		List<PointsTaskStatusVO> result = new java.util.ArrayList<>();
+		for (PointsRuleEntity rule : activeRules) {
+			PointsTaskStatusVO vo = org.springblade.core.tool.utils.BeanUtil.copy(rule, PointsTaskStatusVO.class);
+			if (vo == null) {
+				continue;
+			}
+			String ruleCode = rule.getRuleCode();
+			int todayCount = Long.valueOf(todayCountMap.getOrDefault(ruleCode, 0L)).intValue();
+			int historyCount = Long.valueOf(historyCountMap.getOrDefault(ruleCode, 0L)).intValue();
+			int todayPoints = todayPointsMap.getOrDefault(ruleCode, 0);
+			vo.setCompletedToday(todayCount > 0 ? 1 : 0);
+			vo.setCompletedHistory(historyCount > 0 ? 1 : 0);
+			vo.setTodayGrantCount(todayCount);
+			vo.setTodayGrantPoints(todayPoints);
+			vo.setContinueDays(continueDays);
+			vo.setMonthSigninDays(monthSigninDays);
+
+			String code = Func.toStr(ruleCode).toUpperCase();
+			if ("DAILY_SIGNIN".equals(code)) {
+				vo.setProgressValue(continueDays);
+				vo.setProgressTarget(1);
+				vo.setTaskStatus(signedToday ? "DONE_TODAY" : "TODO");
+			} else if ("SIGNIN_STREAK_7".equals(code)) {
+				vo.setProgressValue(continueDays);
+				vo.setProgressTarget(7);
+				vo.setTaskStatus(signedToday && continueDays >= 7 ? "DONE_TODAY" : "PROGRESS");
+			} else if ("SIGNIN_STREAK_30".equals(code)) {
+				vo.setProgressValue(continueDays);
+				vo.setProgressTarget(30);
+				vo.setTaskStatus(signedToday && continueDays >= 30 ? "DONE_TODAY" : "PROGRESS");
+			} else if (rule.getRequireFirstFlag() != null && rule.getRequireFirstFlag() == 1) {
+				vo.setTaskStatus(historyCount > 0 ? "DONE_ONCE" : "TODO");
+			} else if (rule.getLifecycleLimitCount() != null && rule.getLifecycleLimitCount() > 0) {
+				vo.setProgressValue(historyCount);
+				vo.setProgressTarget(rule.getLifecycleLimitCount());
+				vo.setTaskStatus(historyCount >= rule.getLifecycleLimitCount() ? "DONE_ONCE" : "TODO");
+			} else if (todayCount > 0) {
+				vo.setTaskStatus("DONE_TODAY");
+			} else {
+				vo.setTaskStatus("TODO");
+			}
+			result.add(vo);
+		}
+		return result;
 	}
 
 	@Override
@@ -325,17 +441,6 @@ public class PointsRuleServiceImpl extends BaseServiceImpl<PointsRuleMapper, Poi
 		return 0;
 	}
 
-	private int extractPoints(String message) {
-		try {
-			int idx = message.indexOf("+");
-			int end = message.indexOf("绿豆");
-			if (idx >= 0 && end > idx) {
-				return Integer.parseInt(message.substring(idx + 1, end));
-			}
-		} catch (Exception ignored) {
-		}
-		return 0;
-	}
 
 	private String dayKey(Date date) {
 		Calendar c = Calendar.getInstance();
