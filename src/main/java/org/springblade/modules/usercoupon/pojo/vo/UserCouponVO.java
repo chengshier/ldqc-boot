@@ -29,6 +29,8 @@ import org.springblade.modules.usercoupon.pojo.entity.UserCouponEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import java.io.Serial;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 用户认证类型表 视图实体类
@@ -42,5 +44,36 @@ public class UserCouponVO extends UserCouponEntity {
 	@Serial
 	private static final long serialVersionUID = 1L;
 
+	private String couponName;
+
+	private String couponType;
+
+	private String benefitMode;
+
+	private Integer durationMinutes;
+
+	private Integer totalTimes;
+
+	private String scopeType;
+
+	private String scopeRefId;
+
+	private String acquireType;
+
+	private Integer costPoints;
+
+	private String venueName;
+
+	private String usageNotice;
+
+	private String userName;
+
+	private String nickname;
+
+	private String phoneMask;
+
+	private Integer totalDurationMinutes;
+
+	private List<Map<String, Object>> verifyRecords;
 }
 

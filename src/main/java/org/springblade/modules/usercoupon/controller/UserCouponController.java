@@ -42,15 +42,15 @@ import org.springblade.core.secure.utils.AuthUtil;
 import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springblade.modules.usercoupon.pojo.entity.UserCouponEntity;
+import org.springblade.modules.usercoupon.pojo.dto.UserCouponVerifyConfirmRequest;
 import org.springblade.modules.usercoupon.pojo.vo.UserCouponVO;
 import org.springblade.modules.usercoupon.excel.UserCouponExcel;
-import org.springblade.modules.usercoupon.wrapper.UserCouponWrapper;
 import org.springblade.modules.usercoupon.service.IUserCouponService;
 import org.springblade.core.boot.ctrl.BladeController;
 import org.springblade.core.tool.utils.DateUtil;
 import org.springblade.core.excel.util.ExcelUtil;
-import org.springblade.core.tool.constant.BladeConstant;
 import java.util.Map;
 import java.util.List;
 import jakarta.servlet.http.HttpServletResponse;
@@ -75,9 +75,8 @@ public class UserCouponController extends BladeController {
 	@GetMapping("/detail")
 	@ApiOperationSupport(order = 1)
 	@Operation(summary = "详情", description  = "传入userCoupon")
-	public R<UserCouponVO> detail(UserCouponEntity userCoupon) {
-		UserCouponEntity detail = userCouponService.getOne(Condition.getQueryWrapper(userCoupon));
-		return R.data(UserCouponWrapper.build().entityVO(detail));
+	public R<UserCouponVO> detail(@RequestParam Long id) {
+		return R.data(userCouponService.buildCouponDetail(id));
 	}
 	/**
 	 * 用户优惠券 分页
@@ -87,7 +86,9 @@ public class UserCouponController extends BladeController {
 	@Operation(summary = "分页", description  = "传入userCoupon")
 	public R<IPage<UserCouponVO>> list(@Parameter(hidden = true) @RequestParam Map<String, Object> userCoupon, Query query) {
 		IPage<UserCouponEntity> pages = userCouponService.page(Condition.getPage(query), Condition.getQueryWrapper(userCoupon, UserCouponEntity.class));
-		return R.data(UserCouponWrapper.build().pageVO(pages));
+		IPage<UserCouponVO> result = new Page<>(pages.getCurrent(), pages.getSize(), pages.getTotal());
+		result.setRecords(userCouponService.buildCouponList(pages.getRecords()));
+		return R.data(result);
 	}
 
 	/**
@@ -174,6 +175,41 @@ public class UserCouponController extends BladeController {
 	public R<String> releaseCoupon(@RequestParam String couponNo) {
 		String result = userCouponService.releaseCoupon(couponNo);
 		return "释放成功".equals(result) ? R.data(result) : R.fail(result);
+	}
+
+	@GetMapping("/qrcode-token")
+	@ApiOperationSupport(order = 12)
+	@Operation(summary = "获取动态二维码令牌", description  = "传入userCouponId")
+	public R<Map<String, Object>> getQrCodeToken(@RequestParam Long userCouponId) {
+		return R.data(userCouponService.getQrCodeToken(userCouponId, AuthUtil.getUserId()));
+	}
+
+	@GetMapping("/verify-records")
+	@ApiOperationSupport(order = 13)
+	@Operation(summary = "获取核销记录", description  = "传入userCouponId")
+	public R<List<Map<String, Object>>> getVerifyRecords(@RequestParam Long userCouponId) {
+		return R.data(userCouponService.getVerifyRecords(userCouponId));
+	}
+
+	@GetMapping("/verify-permission")
+	@ApiOperationSupport(order = 14)
+	@Operation(summary = "获取核销权限", description  = "当前登录账号的核销权限")
+	public R<Map<String, Object>> getVerifyPermission() {
+		return R.data(userCouponService.getVerifyPermission(AuthUtil.getUserId()));
+	}
+
+	@PostMapping("/verify-scan")
+	@ApiOperationSupport(order = 15)
+	@Operation(summary = "扫码预检", description  = "传入二维码令牌")
+	public R<UserCouponVO> verifyScan(@RequestBody Map<String, String> payload) {
+		return R.data(userCouponService.scanVerify(payload.get("qrToken"), AuthUtil.getUserId()));
+	}
+
+	@PostMapping("/verify-confirm")
+	@ApiOperationSupport(order = 16)
+	@Operation(summary = "核销确认", description  = "支持整张核销和部分核销")
+	public R<Map<String, Object>> verifyConfirm(@RequestBody UserCouponVerifyConfirmRequest request) {
+		return R.data(userCouponService.confirmVerify(request, AuthUtil.getUserId()));
 	}
 
 }
