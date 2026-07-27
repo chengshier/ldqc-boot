@@ -320,7 +320,7 @@ public class TrainingCourseAdminService {
 		if (value == null || Func.isBlank(String.valueOf(value))) return null;
 		if (value instanceof Date) return (Date) value;
 		try {
-			return org.springblade.core.tool.utils.DateUtil.parse(String.valueOf(value), "yyyy-MM-dd HH:mm:ss");
+			return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(String.valueOf(value));
 		} catch (Exception exception) {
 			throw new ServiceException("授权有效时间格式不正确");
 		}
