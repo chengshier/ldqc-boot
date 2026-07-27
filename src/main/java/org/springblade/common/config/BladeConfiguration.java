@@ -56,7 +56,11 @@ public class BladeConfiguration implements WebMvcConfigurer {
 				"/blade-competition/competition/mobile/detail",
 				// 商城公开商品浏览；兑换确认和订单必须登录。
 				"/blade-mallproduct/mallProduct/mobile/page",
-				"/blade-mallproduct/mallProduct/mobile/detail"
+				"/blade-mallproduct/mallProduct/mobile/detail",
+				// 认证达人公开列表、主页和内容。
+				"/blade-system/talent/mobile/page",
+				"/blade-system/talent/mobile/profile",
+				"/blade-system/talent/mobile/content"
 			)
 			.authEnabled()
 			.addAuthPattern(HttpMethod.ALL, "/blade-chat/message/**", "hasAuth()")
