@@ -1,62 +1,38 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.coupontemplate.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import org.springblade.modules.coupontemplate.pojo.entity.CouponTemplateEntity;
-import org.springblade.modules.coupontemplate.pojo.vo.CouponTemplateVO;
-import org.springblade.modules.coupontemplate.excel.CouponTemplateExcel;
-import org.springblade.modules.coupontemplate.mapper.CouponTemplateMapper;
-import org.springblade.modules.coupontemplate.service.ICouponTemplateService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springblade.core.log.exception.ServiceException;
+import org.springblade.core.mp.base.BaseServiceImpl;
+import org.springblade.core.tool.utils.Func;
 import org.springblade.modules.couponreceivelog.pojo.entity.CouponReceiveLogEntity;
 import org.springblade.modules.couponreceivelog.service.ICouponReceiveLogService;
+import org.springblade.modules.coupontemplate.excel.CouponTemplateExcel;
+import org.springblade.modules.coupontemplate.mapper.CouponTemplateMapper;
+import org.springblade.modules.coupontemplate.pojo.entity.CouponTemplateEntity;
+import org.springblade.modules.coupontemplate.pojo.vo.CouponTemplateVO;
+import org.springblade.modules.coupontemplate.service.ICouponTemplateService;
 import org.springblade.modules.pointsaccount.pojo.entity.PointsAccountEntity;
 import org.springblade.modules.pointsaccount.service.IPointsAccountService;
 import org.springblade.modules.pointsledger.pojo.entity.PointsLedgerEntity;
 import org.springblade.modules.pointsledger.service.IPointsLedgerService;
+import org.springblade.modules.system.pojo.entity.User;
+import org.springblade.modules.system.service.IUserService;
 import org.springblade.modules.usercoupon.pojo.entity.UserCouponEntity;
 import org.springblade.modules.usercoupon.service.IUserCouponService;
-import org.springblade.core.tool.utils.Func;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import org.springblade.core.mp.base.BaseServiceImpl;
-import java.util.List;
-import java.util.Date;
-import java.util.UUID;
-import java.util.Calendar;
 
-/**
- * 用户认证类型表 服务实现类
- *
- * @author BladeX
- * @since 2026-04-02
- */
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+
+/** 优惠券模板与领取服务。 */
 @Service
 @RequiredArgsConstructor
 public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMapper, CouponTemplateEntity> implements ICouponTemplateService {
@@ -65,32 +41,28 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 	private final ICouponReceiveLogService couponReceiveLogService;
 	private final IPointsAccountService pointsAccountService;
 	private final IPointsLedgerService pointsLedgerService;
+	private final IUserService userService;
 
 	@Override
 	public IPage<CouponTemplateVO> selectCouponTemplatePage(IPage<CouponTemplateVO> page, CouponTemplateVO couponTemplate) {
 		return page.setRecords(baseMapper.selectCouponTemplatePage(page, couponTemplate));
 	}
 
-
 	@Override
 	public List<CouponTemplateExcel> exportCouponTemplate(Wrapper<CouponTemplateEntity> queryWrapper) {
-		List<CouponTemplateExcel> couponTemplateList = baseMapper.exportCouponTemplate(queryWrapper);
-		//couponTemplateList.forEach(couponTemplate -> {
-		//	couponTemplate.setTypeName(DictCache.getValue(DictEnum.YES_NO, CouponTemplate.getType()));
-		//});
-		return couponTemplateList;
+		return baseMapper.exportCouponTemplate(queryWrapper);
 	}
 
 	@Override
-	public String receiveCheck(Long templateId, Integer growthLevel, Integer authStatus) {
+	@Transactional(readOnly = true)
+	public String receiveCheck(Long templateId, Long userId) {
+		if (userId == null || userId <= 0) return "请先登录";
 		CouponTemplateEntity template = this.getById(templateId);
-		if (template == null || Func.equals(template.getIsDeleted(), 1)) return "券模板不存在";
-		if (template.getStatus() == null || template.getStatus() != 1) return "券模板不可领取";
-		if (template.getRemainStock() != null && template.getRemainStock() <= 0) return "库存不足";
-		int level = growthLevel == null ? 0 : growthLevel;
-		if (template.getMinGrowthLevel() != null && level < template.getMinGrowthLevel()) return "成长等级不足";
-		if (template.getExtJson() != null && template.getExtJson().contains("\"receive_auth_required\":true") && (authStatus == null || authStatus != 2)) {
-			return "需要完成认证后领取";
+		String eligibility = eligibilityError(template, userId);
+		if (eligibility != null) return eligibility;
+		long receiveCount = countReceived(userId, templateId);
+		if (template.getPerUserLimit() != null && template.getPerUserLimit() > 0 && receiveCount >= template.getPerUserLimit()) {
+			return "超过每人限领次数";
 		}
 		return "可领取";
 	}
@@ -98,25 +70,40 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 	@Override
 	@Transactional(rollbackFor = Exception.class)
 	public String receive(Long templateId, String requestId, Long userId) {
-		if (userId == null) return "请先登录";
-		CouponTemplateEntity template = this.getById(templateId);
-		if (template == null || Func.equals(template.getIsDeleted(), 1)) return "券模板不存在";
-		if (!Func.equals(template.getStatus(), 1)) return "券模板不可领取";
-		if (template.getRemainStock() == null || template.getRemainStock() <= 0) return "库存不足";
+		if (userId == null || userId <= 0) return "请先登录";
+		if (Func.isBlank(requestId)) return "缺少领取请求号，请刷新页面后重试";
+		String effectiveRequestId = requestId.trim();
+		if (effectiveRequestId.length() > 64) return "领取请求号不正确";
 
-		PointsAccountEntity account = pointsAccountService.getOne(Wrappers.<PointsAccountEntity>lambdaQuery().eq(PointsAccountEntity::getUserId, userId));
-		int growthLevel = account == null || account.getGrowthLevel() == null ? 0 : account.getGrowthLevel();
-		if (template.getMinGrowthLevel() != null && growthLevel < template.getMinGrowthLevel()) return "成长等级不足";
-
-		long receiveCount = userCouponService.count(Wrappers.<UserCouponEntity>lambdaQuery()
-			.eq(UserCouponEntity::getUserId, userId)
-			.eq(UserCouponEntity::getCouponTemplateId, templateId)
-			.eq(UserCouponEntity::getIsDeleted, 0));
-		if (template.getPerUserLimit() != null && receiveCount >= template.getPerUserLimit()) return "超过每人限领次数";
-		String effectiveRequestId = Func.isBlank(requestId) ? UUID.randomUUID().toString() : requestId;
-		if (couponReceiveLogService.count(Wrappers.<CouponReceiveLogEntity>lambdaQuery()
+		CouponReceiveLogEntity idempotent = couponReceiveLogService.getOne(Wrappers.<CouponReceiveLogEntity>lambdaQuery()
+			.eq(CouponReceiveLogEntity::getUserId, userId)
 			.eq(CouponReceiveLogEntity::getRequestId, effectiveRequestId)
-			.eq(CouponReceiveLogEntity::getIsDeleted, 0)) > 0) return "请勿重复提交";
+			.eq(CouponReceiveLogEntity::getIsDeleted, 0)
+			.last("limit 1"));
+		if (idempotent != null && Func.equals(idempotent.getStatus(), 1)) return "领取成功";
+
+		// 锁定模板行，使库存扣减、用户限领和积分兑换在同一模板内串行完成。
+		CouponTemplateEntity template = this.getOne(Wrappers.<CouponTemplateEntity>lambdaQuery()
+			.eq(CouponTemplateEntity::getId, templateId)
+			.eq(CouponTemplateEntity::getIsDeleted, 0)
+			.last("FOR UPDATE"));
+		String eligibility = eligibilityError(template, userId);
+		if (eligibility != null) return eligibility;
+
+		long receiveCount = countReceived(userId, templateId);
+		if (template.getPerUserLimit() != null && template.getPerUserLimit() > 0 && receiveCount >= template.getPerUserLimit()) {
+			return "超过每人限领次数";
+		}
+
+		int costPoints = "POINTS_EXCHANGE".equalsIgnoreCase(template.getAcquireType())
+			? Math.max(template.getCostPoints() == null ? 0 : template.getCostPoints(), 0) : 0;
+		PointsAccountEntity account = pointsAccountService.getOne(Wrappers.<PointsAccountEntity>lambdaQuery()
+			.eq(PointsAccountEntity::getUserId, userId)
+			.eq(PointsAccountEntity::getIsDeleted, 0)
+			.last("limit 1"));
+		if (costPoints > 0 && (account == null || account.getAvailablePoints() == null || account.getAvailablePoints() < costPoints)) {
+			return "绿豆不足";
+		}
 
 		boolean reserved = this.update(Wrappers.<CouponTemplateEntity>lambdaUpdate()
 			.eq(CouponTemplateEntity::getId, templateId)
@@ -124,22 +111,24 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 			.gt(CouponTemplateEntity::getRemainStock, 0)
 			.setSql("remain_stock = remain_stock - 1"));
 		if (!reserved) return "库存不足";
-		int costPoints = "POINTS_EXCHANGE".equalsIgnoreCase(template.getAcquireType()) ? Math.max(template.getCostPoints() == null ? 0 : template.getCostPoints(), 0) : 0;
+
 		if (costPoints > 0) {
 			boolean deducted = pointsAccountService.update(Wrappers.<PointsAccountEntity>lambdaUpdate()
-				.eq(PointsAccountEntity::getUserId, userId)
+				.eq(PointsAccountEntity::getId, account.getId())
 				.ge(PointsAccountEntity::getAvailablePoints, costPoints)
-				.setSql("available_points = available_points - " + costPoints + ", total_spent_points = total_spent_points + " + costPoints + ", version = version + 1"));
-			if (!deducted) throw new IllegalStateException("绿豆不足");
-			PointsAccountEntity updated = pointsAccountService.getOne(Wrappers.<PointsAccountEntity>lambdaQuery().eq(PointsAccountEntity::getUserId, userId));
+				.setSql("available_points = available_points - " + costPoints)
+				.setSql("total_spent_points = IFNULL(total_spent_points,0) + " + costPoints)
+				.setSql("version = IFNULL(version,0) + 1"));
+			if (!deducted) throw new ServiceException("绿豆不足或账户状态已变化");
+			PointsAccountEntity updated = pointsAccountService.getById(account.getId());
 			PointsLedgerEntity ledger = new PointsLedgerEntity();
 			ledger.setUserId(userId);
 			ledger.setChangeType("SPEND");
 			ledger.setChangePoints(-costPoints);
-			ledger.setBeforePoints(updated.getAvailablePoints() + costPoints);
-			ledger.setAfterPoints(updated.getAvailablePoints());
+			ledger.setBeforePoints((updated == null || updated.getAvailablePoints() == null ? 0 : updated.getAvailablePoints()) + costPoints);
+			ledger.setAfterPoints(updated == null || updated.getAvailablePoints() == null ? 0 : updated.getAvailablePoints());
 			ledger.setRuleCode("COUPON_POINTS_EXCHANGE");
-			ledger.setBizType("couponExchange");
+			ledger.setBizType("COUPON_EXCHANGE");
 			ledger.setBizId(String.valueOf(templateId));
 			ledger.setRequestId(effectiveRequestId);
 			ledger.setRemark("兑换优惠券：" + template.getCouponName());
@@ -147,28 +136,27 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 		}
 
 		Date now = new Date();
-		Date endAt = template.getValidEndAt();
-		if (Func.equals(template.getValidType(), "RELATIVE") && template.getValidDays() != null && template.getValidDays() > 0) {
-			Calendar c = Calendar.getInstance();
-			c.setTime(now);
-			c.add(Calendar.DAY_OF_MONTH, template.getValidDays());
-			endAt = c.getTime();
+		Date startAt = now;
+		Date endAt;
+		if ("FIXED".equalsIgnoreCase(template.getValidType())) {
+			startAt = template.getValidStartAt() == null ? now : template.getValidStartAt();
+			endAt = template.getValidEndAt();
+		} else {
+			Calendar calendar = Calendar.getInstance();
+			calendar.setTime(now);
+			calendar.add(Calendar.DAY_OF_MONTH, template.getValidDays() == null || template.getValidDays() <= 0 ? 30 : template.getValidDays());
+			endAt = calendar.getTime();
 		}
-		if (endAt == null) {
-			Calendar c = Calendar.getInstance();
-			c.setTime(now);
-			c.add(Calendar.DAY_OF_MONTH, 30);
-			endAt = c.getTime();
-		}
+		if (endAt == null || !endAt.after(now)) throw new ServiceException("券模板有效期配置不正确");
 
 		UserCouponEntity userCoupon = new UserCouponEntity();
 		userCoupon.setUserId(userId);
 		userCoupon.setCouponTemplateId(templateId);
-		userCoupon.setCouponNo("CP" + System.currentTimeMillis() + UUID.randomUUID().toString().replace("-", "").substring(0, 6));
+		userCoupon.setCouponNo(buildCouponNo());
 		userCoupon.setCouponStatus("UNUSED");
 		userCoupon.setRemainDurationMinutes(template.getDurationMinutes());
 		userCoupon.setRemainTimes(template.getTotalTimes());
-		userCoupon.setValidStartAt(now);
+		userCoupon.setValidStartAt(startAt);
 		userCoupon.setValidEndAt(endAt);
 		userCouponService.save(userCoupon);
 
@@ -178,9 +166,48 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 		log.setCouponTemplateId(templateId);
 		log.setReceiveChannel("APP");
 		log.setStatus(1);
-		couponReceiveLogService.save(log);
+		try {
+			couponReceiveLogService.save(log);
+		} catch (DuplicateKeyException exception) {
+			throw new ServiceException("领取请求已处理，请勿重复提交");
+		}
 		return "领取成功";
 	}
 
-}
+	private String eligibilityError(CouponTemplateEntity template, Long userId) {
+		if (template == null || Func.equals(template.getIsDeleted(), 1)) return "券模板不存在";
+		if (!Func.equals(template.getStatus(), 1)) return "券模板不可领取";
+		Date now = new Date();
+		if (template.getReceiveStartAt() != null && now.before(template.getReceiveStartAt())) return "领取尚未开始";
+		if (template.getReceiveEndAt() != null && now.after(template.getReceiveEndAt())) return "领取已结束";
+		if (template.getRemainStock() == null || template.getRemainStock() <= 0) return "库存不足";
+		if ("FIXED".equalsIgnoreCase(template.getValidType()) && template.getValidEndAt() != null && !template.getValidEndAt().after(now)) {
+			return "优惠券已过有效期";
+		}
 
+		PointsAccountEntity account = pointsAccountService.getOne(Wrappers.<PointsAccountEntity>lambdaQuery()
+			.eq(PointsAccountEntity::getUserId, userId)
+			.eq(PointsAccountEntity::getIsDeleted, 0)
+			.last("limit 1"));
+		int growthLevel = account == null || account.getGrowthLevel() == null ? 0 : account.getGrowthLevel();
+		if (template.getMinGrowthLevel() != null && template.getMinGrowthLevel() > 0 && growthLevel < template.getMinGrowthLevel()) {
+			return "成长等级不足";
+		}
+		if (Func.equals(template.getAuthRequired(), 1)) {
+			User user = userService.getById(userId);
+			if (user == null || !Func.equals(user.getAuthStatus(), 2)) return "需要完成认证后领取";
+		}
+		return null;
+	}
+
+	private long countReceived(Long userId, Long templateId) {
+		return userCouponService.count(Wrappers.<UserCouponEntity>lambdaQuery()
+			.eq(UserCouponEntity::getUserId, userId)
+			.eq(UserCouponEntity::getCouponTemplateId, templateId)
+			.eq(UserCouponEntity::getIsDeleted, 0));
+	}
+
+	private String buildCouponNo() {
+		return "CP" + System.currentTimeMillis() + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase(Locale.ROOT);
+	}
+}
