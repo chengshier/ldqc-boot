@@ -11,13 +11,80 @@ permissions:
 jobs:
   compile:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
+
+      - name: Validate private repository credential
+        shell: bash
+        env:
+          BLADEX_AUTHORIZATION: ${{ secrets.BLADEX_AUTHORIZATION }}
+        run: |
+          if [ -z "$BLADEX_AUTHORIZATION" ]; then
+            echo "::error::Repository secret BLADEX_AUTHORIZATION is not configured. Store the complete Authorization header value in this secret."
+            exit 1
+          fi
+
+      - name: Generate temporary Maven settings
+        shell: bash
+        env:
+          BLADEX_AUTHORIZATION: ${{ secrets.BLADEX_AUTHORIZATION }}
+        run: |
+          mkdir -p "$HOME/.m2"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from xml.sax.saxutils import escape
+
+          authorization = os.environ['BLADEX_AUTHORIZATION']
+          settings = f'''<?xml version="1.0" encoding="UTF-8"?>
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+            <localRepository>{Path.home() / '.m2' / 'repository'}</localRepository>
+            <servers>
+              <server>
+                <id>bladex</id>
+                <configuration>
+                  <httpHeaders>
+                    <property>
+                      <name>Authorization</name>
+                      <value>{escape(authorization)}</value>
+                    </property>
+                  </httpHeaders>
+                </configuration>
+              </server>
+            </servers>
+            <mirrors>
+              <mirror>
+                <id>aliyun-repos</id>
+                <name>Aliyun Public Repository</name>
+                <url>https://maven.aliyun.com/repository/public</url>
+                <mirrorOf>*,!bladex</mirrorOf>
+              </mirror>
+            </mirrors>
+          </settings>
+          '''
+          Path.home().joinpath('.m2', 'settings.xml').write_text(settings, encoding='utf-8')
+          PY
+
       - name: Compile backend
-        run: mvn -B -DskipTests compile
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -U -s "$HOME/.m2/settings.xml" -DskipTests compile 2>&1 | tee backend-compile.log
+
+      - name: Upload compile log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-compile-log
+          path: backend-compile.log
+          if-no-files-found: ignore
+          retention-days: 7
