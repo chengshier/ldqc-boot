@@ -4,6 +4,12 @@
 
 SET NAMES utf8mb4;
 
+-- 记录字段是否在本次迁移前已经存在，避免脚本重复执行时重新发布运营人员创建的草稿。
+SET @publish_status_existed_before = (
+    SELECT COUNT(1) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ldqc_training' AND COLUMN_NAME = 'publish_status'
+);
+
 DROP PROCEDURE IF EXISTS add_column_if_missing;
 DELIMITER $$
 CREATE PROCEDURE add_column_if_missing(IN p_table VARCHAR(64), IN p_column VARCHAR(64), IN p_definition TEXT)
@@ -113,8 +119,8 @@ CREATE TABLE IF NOT EXISTS ldqc_training_progress (
   KEY idx_training_progress_course (user_id, training_id, last_play_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='培训课程学习进度';
 
--- 既有线下课程保持原表现；只有运营明确设置 ONLINE/MIXED 并发布后才进入课程视频入口。
+-- 仅首次新增 publish_status 字段时迁移历史数据；重复执行不改变后续运营草稿状态。
 UPDATE ldqc_training
    SET content_mode = COALESCE(NULLIF(content_mode, ''), 'OFFLINE'),
        publish_status = CASE WHEN status = 1 THEN 'PUBLISHED' ELSE 'OFFLINE' END
- WHERE publish_status IS NULL OR publish_status = '';
+ WHERE @publish_status_existed_before = 0;
