@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="org.springblade.modules.imgDetail.mapper.ImgDetailMapper">
 
-    <resultMap id="imgDetailResultMap" type="org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity">
+    <resultMap id="imgDetailResultMap" type="org.springblade.modules.imgDetail.pojo.vo.ImgDetailVO">
         <result column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>
         <result column="content" property="content"/>
@@ -36,13 +36,45 @@
         <result column="update_time" property="updateTime"/>
         <result column="status" property="status"/>
         <result column="is_deleted" property="isDeleted"/>
+        <result column="username" property="username"/>
+        <result column="avatar" property="avatar"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="category_p_name" property="categoryPName"/>
     </resultMap>
 
     <select id="selectImgDetailPage" resultMap="imgDetailResultMap">
-        select * from t_img_detail where is_deleted = 0
+        SELECT d.*,
+               COALESCE(NULLIF(u.name, ''), NULLIF(u.real_name, ''), u.account, CONCAT('用户', d.user_id)) AS username,
+               u.avatar AS avatar,
+               c.name AS category_name,
+               pc.name AS category_p_name
+          FROM t_img_detail d
+          LEFT JOIN blade_user u ON u.id = d.user_id AND u.is_deleted = 0
+          LEFT JOIN t_category c ON c.id = d.category_id AND c.is_deleted = 0
+          LEFT JOIN t_category pc ON pc.id = d.category_pid AND pc.is_deleted = 0
+         WHERE d.is_deleted = 0
+        <if test="imgDetail != null and imgDetail.status != null">
+           AND d.status = #{imgDetail.status}
+        </if>
+        <if test="imgDetail != null and imgDetail.mediaType != null and imgDetail.mediaType != ''">
+           AND UPPER(d.media_type) = UPPER(#{imgDetail.mediaType})
+        </if>
+        <if test="imgDetail != null and imgDetail.categoryId != null">
+           AND d.category_id = #{imgDetail.categoryId}
+        </if>
+        <if test="imgDetail != null and imgDetail.userId != null">
+           AND d.user_id = #{imgDetail.userId}
+        </if>
+        <if test="imgDetail != null and imgDetail.content != null and imgDetail.content != ''">
+           AND (d.content LIKE CONCAT('%', #{imgDetail.content}, '%')
+                OR u.name LIKE CONCAT('%', #{imgDetail.content}, '%')
+                OR u.real_name LIKE CONCAT('%', #{imgDetail.content}, '%'))
+        </if>
+         ORDER BY CASE d.status WHEN 0 THEN 0 WHEN 2 THEN 1 WHEN 3 THEN 2 ELSE 3 END,
+                  d.create_time DESC
     </select>
 
     <select id="exportImgDetail" resultType="org.springblade.modules.imgDetail.excel.ImgDetailExcel">
-        SELECT * FROM t_img_detail
+        SELECT * FROM t_img_detail ${ew.customSqlSegment}
     </select>
 </mapper>
