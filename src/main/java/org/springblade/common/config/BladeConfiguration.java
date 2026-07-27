@@ -58,7 +58,9 @@ public class BladeConfiguration implements WebMvcConfigurer {
 				"/blade-system/talent/mobile/content",
 				"/blade-talentpost/talentPost/mobile/detail",
 				"/blade-venue/venue/mobile/page",
-				"/blade-venue/venue/mobile/detail"
+				"/blade-venue/venue/mobile/detail",
+				"/blade-coupontemplate/couponTemplate/mobile/page",
+				"/blade-coupontemplate/couponTemplate/mobile/detail"
 			)
 			.authEnabled()
 			.addAuthPattern(HttpMethod.ALL, "/blade-chat/message/**", "hasAuth()")
