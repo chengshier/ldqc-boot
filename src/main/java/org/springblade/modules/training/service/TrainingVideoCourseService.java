@@ -25,13 +25,18 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * 长视频课程目录、播放授权和学习进度服务。
+ *
+ * <p>目录接口只返回课时摘要和锁定状态，不返回原始视频地址；实际视频地址必须
+ * 通过短时播放令牌获取。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -68,17 +73,36 @@ public class TrainingVideoCourseService {
 		Map<Long, List<TrainingLessonEntity>> lessonGroups = lessons.stream()
 			.collect(Collectors.groupingBy(TrainingLessonEntity::getChapterId, LinkedHashMap::new, Collectors.toList()));
 		List<Map<String, Object>> chapterItems = new ArrayList<>();
+		Set<Long> usedLessonIds = new LinkedHashSet<>();
 		for (TrainingChapterEntity chapter : chapters) {
 			Map<String, Object> chapterItem = new LinkedHashMap<>();
 			chapterItem.put("id", chapter.getId());
 			chapterItem.put("title", chapter.getTitle());
 			chapterItem.put("description", chapter.getDescription());
+			chapterItem.put("sortOrder", safeInt(chapter.getSortOrder()));
 			List<Map<String, Object>> lessonItems = new ArrayList<>();
 			for (TrainingLessonEntity lesson : lessonGroups.getOrDefault(chapter.getId(), Collections.emptyList())) {
 				lessonItems.add(buildLessonOutline(lesson, courseAuthorized, progressMap.get(lesson.getId())));
+				usedLessonIds.add(lesson.getId());
 			}
 			chapterItem.put("lessons", lessonItems);
 			chapterItems.add(chapterItem);
+		}
+
+		// 防止历史数据中课时没有章节而完全不可见。
+		List<TrainingLessonEntity> orphanLessons = lessons.stream()
+			.filter(item -> !usedLessonIds.contains(item.getId()))
+			.collect(Collectors.toList());
+		if (!orphanLessons.isEmpty()) {
+			Map<String, Object> otherChapter = new LinkedHashMap<>();
+			otherChapter.put("id", 0L);
+			otherChapter.put("title", "其他课时");
+			otherChapter.put("description", "尚未归入章节的课时");
+			otherChapter.put("sortOrder", Integer.MAX_VALUE);
+			otherChapter.put("lessons", orphanLessons.stream()
+				.map(item -> buildLessonOutline(item, courseAuthorized, progressMap.get(item.getId())))
+				.collect(Collectors.toList()));
+			chapterItems.add(otherChapter);
 		}
 
 		Map<String, Object> result = new LinkedHashMap<>();
@@ -88,9 +112,17 @@ public class TrainingVideoCourseService {
 		result.put("instructorName", course.getInstructorName());
 		result.put("description", course.getDescription());
 		result.put("price", course.getPrice());
+		result.put("duration", course.getDuration());
+		result.put("location", course.getLocation());
+		result.put("address", course.getAddress());
+		result.put("longitude", course.getLongitude());
+		result.put("latitude", course.getLatitude());
 		result.put("category", course.getCategory());
 		result.put("courseType", course.getCourseType());
-		result.put("contentMode", course.getContentMode());
+		result.put("orgId", course.getOrgId());
+		result.put("teacherId", course.getTeacherId());
+		result.put("talentUserId", course.getTalentUserId());
+		result.put("contentMode", normalizeContentMode(course.getContentMode()));
 		result.put("purchaseRequired", requiresPurchase(course));
 		result.put("authorized", courseAuthorized);
 		result.put("totalLessons", lessons.size());
@@ -114,6 +146,7 @@ public class TrainingVideoCourseService {
 		payload.put("lessonId", lesson.getId());
 		payload.put("trainingId", lesson.getTrainingId());
 		payload.put("userId", userId == null ? 0L : userId);
+		payload.put("issuedAt", System.currentTimeMillis());
 		redisUtils.set(PLAY_TOKEN_PREFIX + token, JSON.toJSONString(payload), PLAY_TOKEN_TTL_SECONDS);
 
 		Map<String, Object> result = new LinkedHashMap<>();
@@ -185,7 +218,7 @@ public class TrainingVideoCourseService {
 			// 不允许较旧的心跳覆盖更靠后的断点。
 			record.setProgressSeconds(Math.max(safeInt(record.getProgressSeconds()), progress));
 			record.setDurationSeconds(duration);
-			record.setCompleted(Func.equals(record.getCompleted(), 1) || completed ? 1 : 0);
+			record.setCompleted((Func.equals(record.getCompleted(), 1) || completed) ? 1 : 0);
 			record.setLastPlayAt(new Date());
 			progressMapper.updateById(record);
 		}
@@ -211,7 +244,8 @@ public class TrainingVideoCourseService {
 														 boolean courseAuthorized,
 														 TrainingProgressEntity progress) {
 		boolean trial = Func.equals(lesson.getIsTrial(), 1);
-		boolean playable = trial || courseAuthorized;
+		boolean mediaReady = "READY".equalsIgnoreCase(Func.toStr(lesson.getMediaProcessStatus(), "READY"));
+		boolean playable = mediaReady && (trial || courseAuthorized);
 		Map<String, Object> item = new LinkedHashMap<>();
 		item.put("id", lesson.getId());
 		item.put("chapterId", lesson.getChapterId());
@@ -221,7 +255,7 @@ public class TrainingVideoCourseService {
 		item.put("durationSeconds", safeInt(lesson.getDurationSeconds()));
 		item.put("trial", trial);
 		item.put("playable", playable);
-		item.put("locked", !playable);
+		item.put("locked", mediaReady && !trial && !courseAuthorized);
 		item.put("mediaProcessStatus", lesson.getMediaProcessStatus());
 		item.put("progressSeconds", progress == null ? 0 : safeInt(progress.getProgressSeconds()));
 		item.put("completed", progress != null && Func.equals(progress.getCompleted(), 1));
@@ -246,7 +280,11 @@ public class TrainingVideoCourseService {
 		if (lesson == null || Func.equals(lesson.getIsDeleted(), 1) || !Func.equals(lesson.getStatus(), 1)) {
 			throw new ServiceException("课时不存在或已下架");
 		}
-		if (!"READY".equalsIgnoreCase(Func.toStr(lesson.getMediaProcessStatus(), "READY"))) {
+		String mediaStatus = Func.toStr(lesson.getMediaProcessStatus(), "READY");
+		if ("FAILED".equalsIgnoreCase(mediaStatus)) {
+			throw new ServiceException("课时视频处理失败，请联系平台处理");
+		}
+		if (!"READY".equalsIgnoreCase(mediaStatus)) {
 			throw new ServiceException("课时视频仍在处理中");
 		}
 		return lesson;
@@ -282,6 +320,11 @@ public class TrainingVideoCourseService {
 			.eq(TrainingProgressEntity::getTrainingId, trainingId)
 			.eq(TrainingProgressEntity::getIsDeleted, 0)).stream()
 			.collect(Collectors.toMap(TrainingProgressEntity::getLessonId, item -> item, (left, right) -> left));
+	}
+
+	private String normalizeContentMode(String value) {
+		String mode = Func.toStr(value, "OFFLINE").trim().toUpperCase();
+		return "ONLINE".equals(mode) || "MIXED".equals(mode) ? mode : "OFFLINE";
 	}
 
 	private int safeInt(Object value) {
