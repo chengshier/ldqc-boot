@@ -12,7 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 课程基础设置服务，供课程工作台使用。
+ * 课程基础设置服务，供运营课程管理与内容工作台使用。
  */
 @Service
 @RequiredArgsConstructor
@@ -23,9 +23,11 @@ public class TrainingCourseSettingsService {
 	@Transactional(rollbackFor = Exception.class)
 	public TrainingEntity save(Map<String, Object> body) {
 		Long trainingId = Func.toLong(body.get("id"));
-		if (trainingId == null) throw new ServiceException("缺少课程ID");
-		TrainingEntity course = trainingService.getById(trainingId);
-		if (course == null || Func.equals(course.getIsDeleted(), 1)) throw new ServiceException("课程不存在");
+		boolean creating = trainingId == null;
+		TrainingEntity course = creating ? new TrainingEntity() : trainingService.getById(trainingId);
+		if (!creating && (course == null || Func.equals(course.getIsDeleted(), 1))) {
+			throw new ServiceException("课程不存在");
+		}
 
 		String title = Func.toStr(body.get("title"), "").trim();
 		if (Func.isBlank(title)) throw new ServiceException("课程标题不能为空");
@@ -48,7 +50,18 @@ public class TrainingCourseSettingsService {
 		course.setAddress(Func.toStr(body.get("address"), "").trim());
 		course.setOrgId(Func.toLong(body.get("orgId")));
 		course.setTeacherId(Func.toLong(body.get("teacherId")));
+		course.setTalentUserId(Func.toLong(body.get("talentUserId")));
 		course.setStatus(Func.toInt(body.get("status"), 1) == 1 ? 1 : 0);
+		course.setSortOrder(Func.toInt(body.get("sortOrder"), Func.toInt(course.getSortOrder(), 0)));
+
+		if (creating) {
+			course.setPublishStatus("DRAFT");
+			course.setAuditReason("课程已创建，请完善章节课时并发布");
+			course.setTotalLessons(0);
+			course.setTotalVideoDuration(0);
+			trainingService.save(course);
+			return course;
+		}
 
 		// 已发布课程修改核心信息后必须重新发布，避免用户看到目录与课程说明不一致。
 		if ("PUBLISHED".equalsIgnoreCase(Func.toStr(course.getPublishStatus(), ""))) {
