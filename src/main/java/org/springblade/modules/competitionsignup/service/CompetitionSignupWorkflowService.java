@@ -38,6 +38,7 @@ public class CompetitionSignupWorkflowService {
 	private static final String STATUS_CONFIRMED = "CONFIRMED";
 	private static final String STATUS_CANCELLED = "CANCELLED";
 	private static final String STATUS_EXPIRED = "EXPIRED";
+	private static final String STATUS_LEGACY_REVIEW = "LEGACY_REVIEW";
 	private static final int PAYMENT_EXPIRE_MINUTES = 15;
 
 	private final ICompetitionService competitionService;
@@ -137,7 +138,8 @@ public class CompetitionSignupWorkflowService {
 
 	public IPage<Map<String, Object>> myPage(int current, int size, Long userId) {
 		requireLogin(userId);
-		Page<CompetitionSignupEntity> source = signupService.page(new Page<>(Math.max(current, 1), Math.min(Math.max(size, 1), 50)),
+		IPage<CompetitionSignupEntity> source = signupService.page(
+			new Page<>(Math.max(current, 1), Math.min(Math.max(size, 1), 50)),
 			Wrappers.<CompetitionSignupEntity>lambdaQuery()
 				.eq(CompetitionSignupEntity::getUserId, userId)
 				.eq(CompetitionSignupEntity::getIsDeleted, 0)
@@ -279,6 +281,7 @@ public class CompetitionSignupWorkflowService {
 		if (STATUS_EXPIRED.equals(status)) return "支付超时";
 		if ("REFUND_PENDING".equals(status)) return "退款处理中";
 		if ("REFUNDED".equals(status)) return "已退款";
+		if (STATUS_LEGACY_REVIEW.equals(status)) return "历史订单待核对";
 		return "状态未知";
 	}
 
