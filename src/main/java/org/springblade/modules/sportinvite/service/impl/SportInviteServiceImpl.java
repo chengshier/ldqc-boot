@@ -111,6 +111,8 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 			throw new ServiceException("活动开始时间不能早于当前时间");
 		}
 
+		// 小程序发布永远创建新邀约，忽略客户端传入的主键和流程字段。
+		sportInvite.setId(null);
 		sportInvite.setPublisherUserId(userId);
 		sportInvite.setCurrentPeople(0);
 		sportInvite.setInviteStatus("OPEN");
@@ -192,6 +194,7 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 		if (autoApprove) {
 			occupySeatOrThrow(invite.getId());
 		}
+		apply.setId(null);
 		apply.setApplicantUserId(userId);
 		apply.setApplyStatus(autoApprove ? "APPROVED" : "PENDING");
 		if (apply.getStatus() == null) {
@@ -318,7 +321,7 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 	}
 
 	/**
-	 * 条件更新原子占用一个名额。只有招募中且当前人数小于目标人数时更新成功。
+	 * 条件更新原子占用一个名额。先基于旧值计算状态，再执行人数自增，兼容 MySQL 的顺序赋值规则。
 	 */
 	private void occupySeatOrThrow(Long inviteId) {
 		LambdaUpdateWrapper<SportInviteEntity> update = Wrappers.<SportInviteEntity>lambdaUpdate()
@@ -326,8 +329,8 @@ public class SportInviteServiceImpl extends BaseServiceImpl<SportInviteMapper, S
 			.eq(SportInviteEntity::getIsDeleted, 0)
 			.eq(SportInviteEntity::getInviteStatus, "OPEN")
 			.apply("COALESCE(current_people, 0) < COALESCE(target_people, 1)")
-			.setSql("current_people = COALESCE(current_people, 0) + 1")
-			.setSql("invite_status = CASE WHEN COALESCE(current_people, 0) + 1 >= COALESCE(target_people, 1) THEN 'FULL' ELSE 'OPEN' END");
+			.setSql("invite_status = CASE WHEN COALESCE(current_people, 0) + 1 >= COALESCE(target_people, 1) THEN 'FULL' ELSE 'OPEN' END")
+			.setSql("current_people = COALESCE(current_people, 0) + 1");
 		if (!this.update(update)) {
 			throw new ServiceException("邀约已满员或当前状态不可加入");
 		}
