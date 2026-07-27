@@ -28,10 +28,12 @@ package org.springblade.modules.usercoupon.service;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import org.springblade.modules.usercoupon.pojo.entity.UserCouponEntity;
 import org.springblade.modules.usercoupon.pojo.vo.UserCouponVO;
+import org.springblade.modules.usercoupon.pojo.dto.UserCouponVerifyConfirmRequest;
 import org.springblade.modules.usercoupon.excel.UserCouponExcel;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.springblade.core.mp.base.BaseService;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 用户认证类型表 服务类
@@ -63,10 +65,47 @@ public interface IUserCouponService extends BaseService<UserCouponEntity> {
 	 */
 	String useCoupon(String couponNo, String orderNo, Long merchantUserId);
 
+	String useCouponById(Long userCouponId, String orderNo, Long merchantUserId, boolean fullUse, int consumeDurationMinutes, int consumeTimes);
+
 	/**
 	 * 释放锁券
 	 */
 	String releaseCoupon(String couponNo);
+
+	/**
+	 * 构建带模板展示字段的用户券详情
+	 */
+	UserCouponVO buildCouponDetail(Long userCouponId);
+
+	/**
+	 * 构建带模板展示字段的用户券列表
+	 */
+	List<UserCouponVO> buildCouponList(List<UserCouponEntity> coupons);
+
+	/**
+	 * 获取券详情动态二维码令牌
+	 */
+	Map<String, Object> getQrCodeToken(Long userCouponId, Long currentUserId);
+
+	/**
+	 * 获取核销记录
+	 */
+	List<Map<String, Object>> getVerifyRecords(Long userCouponId);
+
+	/**
+	 * 获取当前账号核销权限
+	 */
+	Map<String, Object> getVerifyPermission(Long merchantUserId);
+
+	/**
+	 * 扫码预检
+	 */
+	UserCouponVO scanVerify(String qrToken, Long merchantUserId);
+
+	/**
+	 * 核销确认
+	 */
+	Map<String, Object> confirmVerify(UserCouponVerifyConfirmRequest request, Long merchantUserId);
 
 }
 
