@@ -1,3 +1,4 @@
+# retry-trigger: 2
 name: Patch comment audit closure
 
 on:
