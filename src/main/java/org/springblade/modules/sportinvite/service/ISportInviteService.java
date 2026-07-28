@@ -10,13 +10,9 @@ import org.springblade.modules.sportinviteapply.pojo.entity.SportInviteApplyEnti
 import org.springblade.modules.sportinviteapply.pojo.vo.SportInviteApplyVO;
 
 import java.util.List;
+import java.util.Map;
 
-/**
- * 运动邀约表 服务类
- *
- * @author BladeX
- * @since 2026-05-21
- */
+/** 绿动有约业务服务。 */
 public interface ISportInviteService extends BaseService<SportInviteEntity> {
 
 	IPage<SportInviteVO> selectSportInvitePage(IPage<SportInviteVO> page, SportInviteVO sportInvite);
@@ -39,6 +35,14 @@ public interface ISportInviteService extends BaseService<SportInviteEntity> {
 
 	boolean audit(Long applyId, String auditAction, String auditRemark);
 
-	List<SportInviteExcel> exportSportInvite(Wrapper<SportInviteEntity> queryWrapper);
+	/** 管理端全局申请分页，返回申请人昵称和邀约标题。 */
+	IPage<SportInviteApplyVO> adminApplyList(IPage<SportInviteApplyEntity> page, Long inviteId, String applyStatus);
 
+	/** 管理员代处理异常或长期未处理的申请。 */
+	boolean adminAudit(Long applyId, String auditAction, String auditRemark);
+
+	/** 管理端全局待办汇总。 */
+	Map<String, Long> adminSummary();
+
+	List<SportInviteExcel> exportSportInvite(Wrapper<SportInviteEntity> queryWrapper);
 }
