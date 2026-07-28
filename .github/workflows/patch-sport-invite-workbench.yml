@@ -1,0 +1,238 @@
+name: Patch sport invite admin workbench
+
+on:
+  push:
+    branches:
+      - refactor/market-ready-phase1
+    paths:
+      - '.github/workflows/patch-sport-invite-workbench.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+          fetch-depth: 0
+      - name: Patch backend workbench
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          impl_path = Path('src/main/java/org/springblade/modules/sportinvite/service/impl/SportInviteServiceImpl.java')
+          text = impl_path.read_text(encoding='utf-8')
+          if 'org.springblade.modules.system.pojo.entity.User;' not in text:
+              text = text.replace('import org.springblade.modules.sportinviteapply.service.ISportInviteApplyService;\n', 'import org.springblade.modules.sportinviteapply.service.ISportInviteApplyService;\nimport org.springblade.modules.system.pojo.entity.User;\nimport org.springblade.modules.system.service.IUserService;\n', 1)
+          text = text.replace('import java.util.Date;\nimport java.util.HashMap;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\n', 'import java.util.Date;\nimport java.util.HashMap;\nimport java.util.LinkedHashMap;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Function;\nimport java.util.stream.Collectors;\n', 1)
+          field_marker = '\tprivate final IBehaviorFacade behaviorFacade;'
+          if '\tprivate final IUserService userService;' not in text:
+              text = text.replace(field_marker, field_marker + '\n\tprivate final IUserService userService;', 1)
+
+          audit_pattern = re.compile(r'''\n\t@Override\n\t@Transactional\(rollbackFor = Exception\.class\)\n\tpublic boolean audit\(Long applyId, String auditAction, String auditRemark\) \{.*?\n\t\}\n\n\t@Override\n\tpublic List<SportInviteExcel> exportSportInvite''', re.S)
+          replacement = '''
+\t@Override
+\t@Transactional(rollbackFor = Exception.class)
+\tpublic boolean audit(Long applyId, String auditAction, String auditRemark) {
+\t\treturn auditInternal(applyId, auditAction, auditRemark, false);
+\t}
+
+\t@Override
+\tpublic IPage<SportInviteApplyVO> adminApplyList(IPage<SportInviteApplyEntity> page, Long inviteId, String applyStatus) {
+\t\tIPage<SportInviteApplyEntity> entityPage = sportInviteApplyService.page(page,
+\t\t\tWrappers.<SportInviteApplyEntity>lambdaQuery()
+\t\t\t\t.eq(inviteId != null, SportInviteApplyEntity::getInviteId, inviteId)
+\t\t\t\t.eq(Func.isNotBlank(applyStatus), SportInviteApplyEntity::getApplyStatus, applyStatus)
+\t\t\t\t.eq(SportInviteApplyEntity::getIsDeleted, 0)
+\t\t\t\t.orderByAsc(SportInviteApplyEntity::getApplyStatus)
+\t\t\t\t.orderByDesc(SportInviteApplyEntity::getCreateTime));
+
+\t\tList<Long> applicantIds = entityPage.getRecords().stream()
+\t\t\t.map(SportInviteApplyEntity::getApplicantUserId)
+\t\t\t.filter(Objects::nonNull)
+\t\t\t.distinct()
+\t\t\t.toList();
+\t\tMap<Long, User> users = applicantIds.isEmpty() ? Map.of() : userService.listByIds(applicantIds).stream()
+\t\t\t.collect(Collectors.toMap(User::getId, Function.identity(), (left, right) -> left));
+
+\t\tList<Long> inviteIds = entityPage.getRecords().stream()
+\t\t\t.map(SportInviteApplyEntity::getInviteId)
+\t\t\t.filter(Objects::nonNull)
+\t\t\t.distinct()
+\t\t\t.toList();
+\t\tMap<Long, SportInviteEntity> invites = inviteIds.isEmpty() ? Map.of() : this.listByIds(inviteIds).stream()
+\t\t\t.collect(Collectors.toMap(SportInviteEntity::getId, Function.identity(), (left, right) -> left));
+
+\t\treturn entityPage.convert(item -> {
+\t\t\tSportInviteApplyVO vo = BeanUtil.copy(item, SportInviteApplyVO.class);
+\t\t\tif (vo == null) return null;
+\t\t\tUser applicant = users.get(item.getApplicantUserId());
+\t\t\tif (applicant != null) {
+\t\t\t\tvo.setApplicantName(Func.isNotBlank(applicant.getName()) ? applicant.getName() : applicant.getRealName());
+\t\t\t\tvo.setApplicantAvatar(applicant.getAvatar());
+\t\t\t}
+\t\t\tSportInviteEntity invite = invites.get(item.getInviteId());
+\t\t\tif (invite != null) vo.setInviteTitle(invite.getTitle());
+\t\t\treturn vo;
+\t\t});
+\t}
+
+\t@Override
+\t@Transactional(rollbackFor = Exception.class)
+\tpublic boolean adminAudit(Long applyId, String auditAction, String auditRemark) {
+\t\treturn auditInternal(applyId, auditAction, auditRemark, true);
+\t}
+
+\t@Override
+\tpublic Map<String, Long> adminSummary() {
+\t\tMap<String, Long> result = new LinkedHashMap<>();
+\t\tresult.put("inviteTotal", this.count(Wrappers.<SportInviteEntity>lambdaQuery()
+\t\t\t.eq(SportInviteEntity::getIsDeleted, 0)));
+\t\tresult.put("openInviteCount", this.count(Wrappers.<SportInviteEntity>lambdaQuery()
+\t\t\t.eq(SportInviteEntity::getInviteStatus, "OPEN")
+\t\t\t.eq(SportInviteEntity::getIsDeleted, 0)));
+\t\tresult.put("fullInviteCount", this.count(Wrappers.<SportInviteEntity>lambdaQuery()
+\t\t\t.eq(SportInviteEntity::getInviteStatus, "FULL")
+\t\t\t.eq(SportInviteEntity::getIsDeleted, 0)));
+\t\tresult.put("pendingApplyCount", sportInviteApplyService.count(Wrappers.<SportInviteApplyEntity>lambdaQuery()
+\t\t\t.eq(SportInviteApplyEntity::getApplyStatus, "PENDING")
+\t\t\t.eq(SportInviteApplyEntity::getIsDeleted, 0)));
+\t\treturn result;
+\t}
+
+\tprivate boolean auditInternal(Long applyId, String auditAction, String auditRemark, boolean administrator) {
+\t\tSportInviteApplyEntity apply = sportInviteApplyService.getById(applyId);
+\t\tif (apply == null || Objects.equals(apply.getIsDeleted(), 1)) {
+\t\t\tthrow new ServiceException("申请记录不存在");
+\t\t}
+\t\tSportInviteEntity invite = this.getById(apply.getInviteId());
+\t\tLong userId = AuthUtil.getUserId();
+\t\tif (invite == null) {
+\t\t\tthrow new ServiceException("邀约不存在");
+\t\t}
+\t\tif (!administrator && !Objects.equals(invite.getPublisherUserId(), userId)) {
+\t\t\tthrow new ServiceException("只能审核自己邀约的申请");
+\t\t}
+\t\tif (!"PENDING".equalsIgnoreCase(apply.getApplyStatus())) {
+\t\t\tthrow new ServiceException("只能审核待审核申请");
+\t\t}
+
+\t\tString action = Func.toStr(auditAction, "").trim().toUpperCase();
+\t\tString nextStatus;
+\t\tString rejectReason = null;
+\t\tif ("APPROVE".equals(action)) {
+\t\t\toccupySeatOrThrow(invite.getId());
+\t\t\tnextStatus = "APPROVED";
+\t\t} else if ("REJECT".equals(action)) {
+\t\t\tnextStatus = "REJECTED";
+\t\t\trejectReason = auditRemark;
+\t\t} else {
+\t\t\tthrow new ServiceException("审核动作不正确");
+\t\t}
+
+\t\tDate auditTime = new Date();
+\t\tboolean updated = sportInviteApplyService.update(Wrappers.<SportInviteApplyEntity>lambdaUpdate()
+\t\t\t.eq(SportInviteApplyEntity::getId, applyId)
+\t\t\t.eq(SportInviteApplyEntity::getApplyStatus, "PENDING")
+\t\t\t.set(SportInviteApplyEntity::getApplyStatus, nextStatus)
+\t\t\t.set(SportInviteApplyEntity::getRejectReason, rejectReason)
+\t\t\t.set(SportInviteApplyEntity::getAuditUserId, userId)
+\t\t\t.set(SportInviteApplyEntity::getAuditTime, auditTime));
+\t\tif (!updated) {
+\t\t\tthrow new ServiceException("申请状态已发生变化，请刷新后重试");
+\t\t}
+
+\t\tSportInviteAuditLogEntity log = new SportInviteAuditLogEntity();
+\t\tlog.setInviteId(apply.getInviteId());
+\t\tlog.setApplyId(applyId);
+\t\tlog.setAuditUserId(userId);
+\t\tlog.setAuditAction(action);
+\t\tlog.setAuditRemark((administrator ? "[平台代处理] " : "") + Func.toStr(auditRemark, ""));
+\t\tlog.setStatus(1);
+\t\tsportInviteAuditLogService.save(log);
+
+\t\tif ("APPROVE".equals(action)) {
+\t\t\tMap<String, Object> ext = new HashMap<>();
+\t\t\text.put("inviteId", apply.getInviteId());
+\t\t\text.put("applyId", apply.getId());
+\t\t\text.put("auditUserId", userId);
+\t\t\text.put("publisherUserId", invite.getPublisherUserId());
+\t\t\text.put("administrator", administrator);
+\t\t\tbehaviorFacade.onSuccess(BehaviorEventCode.INVITE_APPLY_APPROVED, BehaviorBizType.SPORT_INVITE_APPLY,
+\t\t\t\tString.valueOf(apply.getId()), apply.getApplicantUserId(), null, ext);
+\t\t}
+\t\treturn true;
+\t}
+
+\t@Override
+\tpublic List<SportInviteExcel> exportSportInvite'''
+          if not audit_pattern.search(text):
+              raise SystemExit('sport invite audit block not found')
+          text = audit_pattern.sub(replacement, text, count=1)
+          impl_path.write_text(text, encoding='utf-8')
+
+          controller_path = Path('src/main/java/org/springblade/modules/sportinvite/controller/SportInviteController.java')
+          text = controller_path.read_text(encoding='utf-8')
+          marker = '''\t@IsAdmin
+\t@PostMapping("/remove")'''
+          endpoints = '''\t@IsAdmin
+\t@GetMapping("/admin/summary")
+\t@ApiOperationSupport(order = 14)
+\t@Operation(summary = "管理端待办汇总", description = "返回邀约总数、招募中、满员和待审核申请数量")
+\tpublic R<Map<String, Long>> adminSummary() {
+\t\treturn R.data(sportInviteService.adminSummary());
+\t}
+
+\t@IsAdmin
+\t@GetMapping("/admin/applications")
+\t@ApiOperationSupport(order = 15)
+\t@Operation(summary = "管理端申请分页", description = "运营人员查看全部邀约申请和申请人资料")
+\tpublic R<IPage<SportInviteApplyVO>> adminApplications(Query query,
+\t\t@RequestParam(required = false) Long inviteId,
+\t\t@RequestParam(required = false) String applyStatus) {
+\t\treturn R.data(sportInviteService.adminApplyList(Condition.getPage(query), inviteId, applyStatus));
+\t}
+
+\t@IsAdmin
+\t@PostMapping("/admin/audit")
+\t@ApiOperationSupport(order = 16)
+\t@Operation(summary = "管理端代审申请", description = "平台处理异常或长期未处理的待审核申请")
+\tpublic R adminAudit(@RequestBody Map<String, Object> body) {
+\t\tLong applyId = resolveLong(null, body, "applyId");
+\t\tString action = resolveString(null, body, "auditAction");
+\t\tString remark = resolveString(null, body, "auditRemark");
+\t\tif (applyId == null) return R.fail("缺少申请ID");
+\t\tif (action == null || action.trim().isEmpty()) return R.fail("缺少审核动作");
+\t\treturn R.status(sportInviteService.adminAudit(applyId, action, remark));
+\t}
+
+\t@IsAdmin
+\t@PostMapping("/remove")'''
+          if marker not in text:
+              raise SystemExit('sport invite controller insertion marker not found')
+          text = text.replace(marker, endpoints, 1)
+          controller_path.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate workbench methods
+        shell: bash
+        run: |
+          grep -q 'adminApplyList' src/main/java/org/springblade/modules/sportinvite/service/impl/SportInviteServiceImpl.java
+          grep -q 'auditInternal' src/main/java/org/springblade/modules/sportinvite/service/impl/SportInviteServiceImpl.java
+          grep -q '/admin/applications' src/main/java/org/springblade/modules/sportinvite/controller/SportInviteController.java
+          grep -q '/admin/summary' src/main/java/org/springblade/modules/sportinvite/controller/SportInviteController.java
+      - name: Remove workflow and commit
+        shell: bash
+        run: |
+          rm .github/workflows/patch-sport-invite-workbench.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main/java/org/springblade/modules/sportinvite/service/impl/SportInviteServiceImpl.java \
+                  src/main/java/org/springblade/modules/sportinvite/controller/SportInviteController.java \
+                  .github/workflows/patch-sport-invite-workbench.yml
+          git commit -m 'feat: add sport invite application operations workbench'
+          git push origin HEAD:refactor/market-ready-phase1
