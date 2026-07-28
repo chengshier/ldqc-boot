@@ -41,7 +41,8 @@ jobs:
                   'occupySeatOrThrow',
               ],
               'src/main/java/org/springblade/modules/recommendfeedback/service/RecommendFeedbackService.java': [
-                  'AuthUtil.getUserId()',
+                  'record(Map<String, Object> body, Long userId)',
+                  'event.setUserId(userId)',
                   'NOT_INTERESTED',
               ],
           }
