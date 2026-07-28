@@ -11,10 +11,12 @@ import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springblade.core.boot.ctrl.BladeController;
 import org.springblade.core.excel.util.ExcelUtil;
+import org.springblade.core.log.exception.ServiceException;
 import org.springblade.core.mp.support.Condition;
 import org.springblade.core.mp.support.Query;
 import org.springblade.core.secure.BladeUser;
 import org.springblade.core.secure.annotation.IsAdmin;
+import org.springblade.core.secure.utils.AuthUtil;
 import org.springblade.core.tool.api.R;
 import org.springblade.core.tool.utils.DateUtil;
 import org.springblade.core.tool.utils.Func;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /** 社区评论公开查询、用户操作和管理端维护接口。 */
 @RestController
@@ -124,6 +127,11 @@ public class CommentController extends BladeController {
 	@ApiOperationSupport(order = 22)
 	@Operation(summary = "发表评论", description = "评论用户以后端登录身份为准")
 	public R<CommentVO> addComment(@RequestBody CommentDTO comment) {
+		Long currentUserId = AuthUtil.getUserId();
+		if (Func.isEmpty(currentUserId) || currentUserId <= 0) throw new ServiceException("请先登录后再发表评论");
+		comment.setId(null);
+		comment.setUid(currentUserId);
+		comment.setCount(0L);
 		return R.data(commentService.addComment(comment));
 	}
 
@@ -166,6 +174,12 @@ public class CommentController extends BladeController {
 	@ApiOperationSupport(order = 28)
 	@Operation(summary = "删除自己的评论")
 	public R<Void> delComment(@RequestParam String id) {
+		Long currentUserId = AuthUtil.getUserId();
+		CommentEntity comment = commentService.getById(id);
+		if (comment == null) return R.status(true);
+		if (Func.isEmpty(currentUserId) || !Objects.equals(comment.getUid(), currentUserId)) {
+			throw new ServiceException("只能删除自己的评论");
+		}
 		commentService.delComment(id);
 		return R.status(true);
 	}
