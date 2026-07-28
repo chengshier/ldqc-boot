@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springblade.core.oss.model.BladeFile;
+import org.springblade.modules.contentaudit.service.DynamicContentAutoAuditService;
 import org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity;
 import org.springblade.modules.imgDetail.service.IImgDetailService;
 import org.springblade.modules.resource.builder.OssBuilder;
@@ -32,8 +33,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * 社区短视频封面异步生成组件。
  *
- * <p>处理结果会同步写入 media_process_status：PROCESSING、READY、FAILED，
- * 内容审核工作台只有在 READY 后才允许审核通过。</p>
+ * <p>处理结果会同步写入 media_process_status：PROCESSING、READY、FAILED。
+ * 封面 READY 后自动提交微信媒体安全审核，封面处理或审核未完成前视频不会公开。</p>
  */
 @Slf4j
 @Component
@@ -42,6 +43,7 @@ public class VideoCoverGenerateTool {
 
 	private final OssBuilder ossBuilder;
 	private final IImgDetailService imgDetailService;
+	private final DynamicContentAutoAuditService dynamicContentAutoAuditService;
 
 	@Value("${media.ffmpeg-path:ffmpeg}")
 	private String ffmpegPath;
@@ -80,6 +82,7 @@ public class VideoCoverGenerateTool {
 			}
 			if (hasUsablePoster(latest.getPosterUrl(), latest.getCover())) {
 				markReady(contentId, videoUrl, null);
+				dynamicContentAutoAuditService.resumeAfterPosterReadyAsync(contentId);
 				return;
 			}
 
@@ -107,7 +110,8 @@ public class VideoCoverGenerateTool {
 				return;
 			}
 			markReady(contentId, videoUrl, uploaded.getLink());
-			log.info("视频封面生成完成，contentId={}，cover={}", contentId, uploaded.getLink());
+			dynamicContentAutoAuditService.resumeAfterPosterReadyAsync(contentId);
+			log.info("视频封面生成并提交自动审核，contentId={}，cover={}", contentId, uploaded.getLink());
 		} catch (Exception exception) {
 			log.error("视频封面处理异常，contentId={}，videoUrl={}", contentId, videoUrl, exception);
 			markFailed(contentId, videoUrl, exception.getMessage());
@@ -145,6 +149,7 @@ public class VideoCoverGenerateTool {
 				.eq(ImgDetailEntity::getId, contentId)
 				.eq(videoUrl != null, ImgDetailEntity::getMediaUrl, videoUrl)
 				.set(ImgDetailEntity::getMediaProcessStatus, "FAILED")
+				.set(ImgDetailEntity::getAuditReason, "视频封面处理失败，等待运营人员处理：" + safeReason(reason))
 				.set(ImgDetailEntity::getUpdateTime, LocalDateTime.now());
 			imgDetailService.update(wrapper);
 			log.warn("视频封面处理失败，contentId={}，reason={}", contentId, safeReason(reason));
