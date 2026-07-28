@@ -64,12 +64,12 @@ public class WechatMediaAuditCallbackController {
 			log.warn("微信媒体审核回调缺少 trace_id 或审核结果，body={}", safeBody(body));
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid callback payload");
 		}
+		Integer normalizedStatusCode = payload.statusCode() == null ? null : payload.statusCode().intValue();
 		boolean handled = dynamicContentAutoAuditService.handleMediaCallback(
-			payload.traceId(), payload.suggest(), payload.reason(), payload.statusCode());
+			payload.traceId(), payload.suggest(), payload.reason(), normalizedStatusCode);
 		if (!handled) {
 			log.warn("微信媒体审核回调未匹配任务，traceId={}", payload.traceId());
 		}
-		// 微信要求成功处理时返回 success；重复回调保持幂等。
 		return "success";
 	}
 
@@ -103,14 +103,14 @@ public class WechatMediaAuditCallbackController {
 
 				String suggest = firstText(result, "suggest");
 				if (Func.isBlank(suggest)) suggest = firstText(root, "suggest");
-				Integer isRisky = firstInteger(root, "isrisky", "is_risky");
-				if (isRisky == null) isRisky = firstInteger(result, "isrisky", "is_risky");
+				Long isRisky = firstLong(root, "isrisky", "is_risky");
+				if (isRisky == null) isRisky = firstLong(result, "isrisky", "is_risky");
 				if (Func.isBlank(suggest) && isRisky != null) {
-					suggest = isRisky == 0 ? "pass" : "risky";
+					suggest = isRisky == 0L ? "pass" : "risky";
 				}
 
-				Integer statusCode = firstInteger(root, "status_code", "statusCode");
-				if (statusCode == null) statusCode = firstInteger(result, "status_code", "statusCode");
+				Long statusCode = firstLong(root, "status_code", "statusCode");
+				if (statusCode == null) statusCode = firstLong(result, "status_code", "statusCode");
 				String label = firstText(result, "label");
 				if (Func.isBlank(label)) label = firstText(root, "label");
 				String extra = firstText(root, "extra_info_json", "extraInfoJson");
@@ -122,22 +122,21 @@ public class WechatMediaAuditCallbackController {
 			}
 		}
 
-		// 兼容微信后台选择 XML 消息格式时的基础字段。
 		String traceId = xmlTag(value, "trace_id");
 		String suggest = xmlTag(value, "suggest");
-		Integer isRisky = parseInteger(xmlTag(value, "isrisky"));
+		Long isRisky = parseLong(xmlTag(value, "isrisky"));
 		if (Func.isBlank(suggest) && isRisky != null) {
-			suggest = isRisky == 0 ? "pass" : "risky";
+			suggest = isRisky == 0L ? "pass" : "risky";
 		}
-		Integer statusCode = parseInteger(xmlTag(value, "status_code"));
+		Long statusCode = parseLong(xmlTag(value, "status_code"));
 		String label = xmlTag(value, "label");
 		String extra = xmlTag(value, "extra_info_json");
 		return new CallbackPayload(traceId, suggest, buildReason(label, extra, statusCode), statusCode);
 	}
 
-	private String buildReason(String label, String extra, Integer statusCode) {
+	private String buildReason(String label, String extra, Long statusCode) {
 		StringBuilder builder = new StringBuilder();
-		if (statusCode != null && statusCode != 0) {
+		if (statusCode != null && statusCode != 0L) {
 			builder.append("微信媒体审核回调异常，status_code=").append(statusCode);
 		}
 		if (Func.isNotBlank(label)) {
@@ -160,21 +159,21 @@ public class WechatMediaAuditCallbackController {
 		return null;
 	}
 
-	private Integer firstInteger(JsonNode node, String... fields) {
+	private Long firstLong(JsonNode node, String... fields) {
 		if (node == null || node.isMissingNode() || node.isNull()) return null;
 		for (String field : fields) {
 			JsonNode value = node.path(field);
-			if (value.isInt() || value.isLong()) return value.asInt();
-			Integer parsed = parseInteger(value.asText(null));
+			if (value.isIntegralNumber()) return value.asLong();
+			Long parsed = parseLong(value.asText(null));
 			if (parsed != null) return parsed;
 		}
 		return null;
 	}
 
-	private Integer parseInteger(String value) {
+	private Long parseLong(String value) {
 		if (Func.isBlank(value)) return null;
 		try {
-			return Integer.parseInt(value.trim());
+			return Long.parseLong(value.trim());
 		} catch (NumberFormatException ignored) {
 			return null;
 		}
@@ -213,6 +212,6 @@ public class WechatMediaAuditCallbackController {
 		return body.length() > 500 ? body.substring(0, 500) : body;
 	}
 
-	private record CallbackPayload(String traceId, String suggest, String reason, Integer statusCode) {
+	private record CallbackPayload(String traceId, String suggest, String reason, Long statusCode) {
 	}
 }
