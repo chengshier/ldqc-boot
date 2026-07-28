@@ -1,0 +1,40 @@
+name: Inventory remaining closure modules
+
+on:
+  push:
+    branches:
+      - refactor/market-ready-phase1
+    paths:
+      - '.github/workflows/closure-inventory.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+      - name: Build source inventory
+        shell: bash
+        run: |
+          {
+            echo '# Java paths related to comment/audit/security'
+            find src/main/java -type f \( -iname '*comment*' -o -iname '*audit*' -o -iname '*security*' -o -iname '*moderation*' \) | sort
+            echo
+            echo '# Retry and audit status references'
+            grep -RInE 'RETRY|retryCount|auditStatus|审核|内容安全|security check|msgSec|mediaCheck|risk' src/main/java --include='*.java' --include='*.xml' | head -n 2000 || true
+            echo
+            echo '# Scheduled tasks'
+            grep -RIlE '@Scheduled|SchedulingConfigurer|TaskScheduler' src/main/java --include='*.java' | sort || true
+            echo
+            echo '# Comment controllers/services/entities'
+            grep -RIlE 'class .*Comment|interface .*Comment|CommentEntity|commentStatus' src/main/java --include='*.java' | sort || true
+          } > closure-inventory.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: closure-inventory
+          path: closure-inventory.txt
+          retention-days: 2
