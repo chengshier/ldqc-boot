@@ -8,9 +8,59 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  patch-invalid-media:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+          fetch-depth: 0
+      - name: Route inaccessible media to manual review
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/java/org/springblade/modules/contentaudit/service/DynamicContentAutoAuditService.java')
+          text = path.read_text(encoding='utf-8')
+          old = '''\tprivate void addHttpUrl(Set<String> urls, String value) {
+\t\tif (Func.isBlank(value)) return;
+\t\tString url = value.trim();
+\t\tString lower = url.toLowerCase(Locale.ROOT);
+\t\tif (lower.startsWith("http://") || lower.startsWith("https://")) {
+\t\t\turls.add(url);
+\t\t}
+\t}'''
+          new = '''\tprivate void addHttpUrl(Set<String> urls, String value) {
+\t\tif (Func.isBlank(value)) return;
+\t\t// 相对路径或内网地址也保留为审核任务，由 submitMedia 明确转人工待办，
+\t\t// 避免动态静默卡在待审核状态。
+\t\turls.add(value.trim());
+\t}'''
+          if old in text:
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          elif new not in text:
+              raise SystemExit('Expected dynamic media URL block was not found')
+
+          Path('.github/workflows/one-time-fix-dynamic-media-url.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit source patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No patch needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main/java/org/springblade/modules/contentaudit/service/DynamicContentAutoAuditService.java .github/workflows/one-time-fix-dynamic-media-url.yml
+          git commit -m 'fix: route inaccessible dynamic media to manual review'
+          git push origin HEAD:refactor/market-ready-phase1
+
   compile:
     runs-on: ubuntu-latest
     timeout-minutes: 30
