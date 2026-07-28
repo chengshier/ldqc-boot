@@ -23,6 +23,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          # This workflow is intentionally one-time and deletes itself after applying the patch.
           path = Path('src/main/java/org/springblade/modules/contentaudit/service/DynamicContentAutoAuditService.java')
           text = path.read_text(encoding='utf-8')
           old = '''\tprivate void addHttpUrl(Set<String> urls, String value) {
