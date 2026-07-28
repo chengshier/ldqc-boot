@@ -37,6 +37,7 @@ public class DynamicContentAutoAuditService {
 	public static final String BIZ_TEXT = "IMG_DETAIL_TEXT";
 	public static final String BIZ_MEDIA = "IMG_DETAIL_MEDIA";
 	private static final long MEDIA_CALLBACK_TIMEOUT_MINUTES = 35L;
+	private static final int MAX_ATTEMPTS = 5;
 
 	private final ContentAuditTaskMapper taskMapper;
 	private final IImgDetailService imgDetailService;
@@ -76,6 +77,13 @@ public class DynamicContentAutoAuditService {
 		if (isNewOrRetryable(textTask)) {
 			processTextTask(textTask);
 		}
+		ContentAuditTask currentTextTask = taskMapper.selectById(textTask.getId());
+		if (currentTextTask != null && (Objects.equals(currentTextTask.getAuditStatus(), WechatContentAuditService.REJECTED)
+			|| Objects.equals(currentTextTask.getAuditStatus(), WechatContentAuditService.MANUAL_REQUIRED))) {
+			// 文案已明确拒绝或需要人工复核时，不再额外消耗媒体审核额度。
+			reconcile(contentId);
+			return;
+		}
 
 		for (String mediaUrl : resolveAuditableMediaUrls(content)) {
 			ContentAuditTask mediaTask = ensureTask(content, BIZ_MEDIA, mediaUrl);
@@ -99,7 +107,7 @@ public class DynamicContentAutoAuditService {
 
 	/** 微信异步媒体审核回调。 */
 	@Transactional(rollbackFor = Exception.class)
-	public boolean handleMediaCallback(String traceId, String suggest, String detailReason) {
+	public boolean handleMediaCallback(String traceId, String suggest, String detailReason, Integer statusCode) {
 		if (Func.isBlank(traceId)) {
 			return false;
 		}
@@ -116,6 +124,22 @@ public class DynamicContentAutoAuditService {
 		ImgDetailEntity content = imgDetailService.getById(task.getBizId());
 		if (content == null || !Integer.valueOf(ContentPublishWorkflowService.STATUS_PENDING).equals(content.getStatus())) {
 			log.info("动态已经不处于待审核状态，忽略媒体回调，contentId={}，traceId={}", task.getBizId(), traceId);
+			return true;
+		}
+
+		if (statusCode != null && statusCode != 0) {
+			int attempts = task.getAttemptCount() == null ? 1 : task.getAttemptCount();
+			boolean exhausted = attempts >= MAX_ATTEMPTS;
+			task.setAuditStatus(exhausted
+				? WechatContentAuditService.MANUAL_REQUIRED : WechatContentAuditService.RETRY);
+			task.setProviderTraceId(null);
+			task.setResultCode(exhausted ? "MEDIA_CALLBACK_RETRY_EXHAUSTED" : "MEDIA_CALLBACK_ERROR");
+			task.setResultMessage(Func.isNotBlank(detailReason)
+				? detailReason.trim() : "微信媒体审核回调异常，status_code=" + statusCode);
+			task.setNextRetryTime(exhausted ? null : nextRetryTime(attempts));
+			task.setAuditTime(null);
+			taskMapper.updateById(task);
+			reconcile(task.getBizId());
 			return true;
 		}
 
@@ -171,7 +195,7 @@ public class DynamicContentAutoAuditService {
 		taskMapper.updateById(task);
 
 		WechatContentAuditService.AuditResult result = wechatAuditService.auditText(
-			task.getUserId(), task.getContentSnapshot());
+			task.getUserId(), task.getContentSnapshot(), WechatContentAuditService.SCENE_UGC);
 		applyImmediateResult(task, result, attempt, "TEXT");
 	}
 
@@ -184,7 +208,7 @@ public class DynamicContentAutoAuditService {
 		taskMapper.updateById(task);
 
 		WechatContentAuditService.AuditResult result = wechatAuditService.submitMedia(
-			task.getUserId(), task.getContentSnapshot(), 2);
+			task.getUserId(), task.getContentSnapshot(), 2, WechatContentAuditService.SCENE_UGC);
 		if (result.status() == WechatContentAuditService.PROCESSING) {
 			task.setAuditStatus(WechatContentAuditService.PROCESSING);
 			task.setProviderTraceId(result.traceId());
@@ -205,7 +229,7 @@ public class DynamicContentAutoAuditService {
 									  String prefix) {
 		byte status = result.status();
 		if (status == WechatContentAuditService.RETRY) {
-			boolean exhausted = attempt >= 5;
+			boolean exhausted = attempt >= MAX_ATTEMPTS;
 			task.setAuditStatus(exhausted
 				? WechatContentAuditService.MANUAL_REQUIRED : WechatContentAuditService.RETRY);
 			task.setResultCode(exhausted ? prefix + "_RETRY_EXHAUSTED" : prefix + "_RETRY");
