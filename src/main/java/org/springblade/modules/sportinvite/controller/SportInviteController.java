@@ -36,15 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 绿动有约控制器。
- *
- * 管理端通用增删改查接口通过 {@link IsAdmin} 限制；小程序业务接口由服务层
- * 根据当前登录用户校验发布人、申请人和审核权限。
- *
- * @author BladeX
- * @since 2026-05-21
- */
+/** 绿动有约邀约、申请、审核和运营异常处理接口。 */
 @RestController
 @AllArgsConstructor
 @RequestMapping("blade-sportinvite/sportInvite")
@@ -87,7 +79,7 @@ public class SportInviteController extends BladeController {
 	@IsAdmin
 	@PostMapping("/save")
 	@ApiOperationSupport(order = 5)
-	@Operation(summary = "管理端新增", description = "运营人员新增邀约")
+	@Operation(summary = "管理端新增", description = "仅用于平台官方邀约或数据修复")
 	public R save(@Valid @RequestBody SportInviteEntity sportInvite) {
 		return R.status(sportInviteService.save(sportInvite));
 	}
@@ -95,7 +87,7 @@ public class SportInviteController extends BladeController {
 	@IsAdmin
 	@PostMapping("/update")
 	@ApiOperationSupport(order = 6)
-	@Operation(summary = "管理端修改", description = "运营人员修改邀约")
+	@Operation(summary = "管理端修改", description = "仅用于平台纠错，不允许运营人员修改人数等流程字段")
 	public R update(@Valid @RequestBody SportInviteEntity sportInvite) {
 		return R.status(sportInviteService.updateById(sportInvite));
 	}
@@ -111,11 +103,9 @@ public class SportInviteController extends BladeController {
 	@ApiOperationSupport(order = 8)
 	@Operation(summary = "取消邀约", description = "兼容 Query 参数或 JSON Body 传入 id")
 	public R cancel(@RequestParam(required = false) Long id,
-					@RequestBody(required = false) Map<String, Object> body) {
+		@RequestBody(required = false) Map<String, Object> body) {
 		Long inviteId = resolveLong(id, body, "id");
-		if (inviteId == null) {
-			return R.fail("缺少邀约ID");
-		}
+		if (inviteId == null) return R.fail("缺少邀约ID");
 		return R.status(sportInviteService.cancel(inviteId));
 	}
 
@@ -151,49 +141,71 @@ public class SportInviteController extends BladeController {
 	@ApiOperationSupport(order = 13)
 	@Operation(summary = "审核申请", description = "兼容 Query 参数或 JSON Body；仅邀约发布人可操作")
 	public R audit(@RequestParam(required = false) Long applyId,
-				   @RequestParam(required = false) String auditAction,
-				   @RequestParam(required = false) String auditRemark,
-				   @RequestBody(required = false) Map<String, Object> body) {
+		@RequestParam(required = false) String auditAction,
+		@RequestParam(required = false) String auditRemark,
+		@RequestBody(required = false) Map<String, Object> body) {
 		Map<String, Object> safeBody = body == null ? Collections.emptyMap() : body;
 		Long targetApplyId = resolveLong(applyId, safeBody, "applyId");
 		String targetAction = resolveString(auditAction, safeBody, "auditAction");
 		String targetRemark = resolveString(auditRemark, safeBody, "auditRemark");
-		if (targetApplyId == null) {
-			return R.fail("缺少申请ID");
-		}
-		if (targetAction == null || targetAction.trim().isEmpty()) {
-			return R.fail("缺少审核动作");
-		}
+		if (targetApplyId == null) return R.fail("缺少申请ID");
+		if (targetAction == null || targetAction.trim().isEmpty()) return R.fail("缺少审核动作");
 		return R.status(sportInviteService.audit(targetApplyId, targetAction, targetRemark));
 	}
 
 	@IsAdmin
-	@PostMapping("/remove")
+	@GetMapping("/admin/summary")
 	@ApiOperationSupport(order = 14)
-	@Operation(summary = "管理端删除", description = "运营人员逻辑删除邀约")
+	@Operation(summary = "管理端待办汇总", description = "返回邀约总数、招募中、满员和待审核申请数量")
+	public R<Map<String, Long>> adminSummary() {
+		return R.data(sportInviteService.adminSummary());
+	}
+
+	@IsAdmin
+	@GetMapping("/admin/applications")
+	@ApiOperationSupport(order = 15)
+	@Operation(summary = "管理端申请分页", description = "运营人员查看全部邀约申请和申请人资料")
+	public R<IPage<SportInviteApplyVO>> adminApplications(Query query,
+		@RequestParam(required = false) Long inviteId,
+		@RequestParam(required = false) String applyStatus) {
+		return R.data(sportInviteService.adminApplyList(Condition.getPage(query), inviteId, applyStatus));
+	}
+
+	@IsAdmin
+	@PostMapping("/admin/audit")
+	@ApiOperationSupport(order = 16)
+	@Operation(summary = "管理端代审申请", description = "平台处理异常或长期未处理的待审核申请")
+	public R adminAudit(@RequestBody Map<String, Object> body) {
+		Long applyId = resolveLong(null, body, "applyId");
+		String action = resolveString(null, body, "auditAction");
+		String remark = resolveString(null, body, "auditRemark");
+		if (applyId == null) return R.fail("缺少申请ID");
+		if (action == null || action.trim().isEmpty()) return R.fail("缺少审核动作");
+		return R.status(sportInviteService.adminAudit(applyId, action, remark));
+	}
+
+	@IsAdmin
+	@PostMapping("/remove")
+	@ApiOperationSupport(order = 17)
+	@Operation(summary = "管理端删除", description = "仅用于违规或异常邀约的逻辑删除")
 	public R remove(@Parameter(description = "主键集合", required = true) @RequestParam String ids) {
 		return R.status(sportInviteService.deleteLogic(Func.toLongList(ids)));
 	}
 
 	@IsAdmin
 	@GetMapping("/export-sportInvite")
-	@ApiOperationSupport(order = 15)
+	@ApiOperationSupport(order = 18)
 	@Operation(summary = "导出邀约", description = "运营人员按筛选条件导出邀约")
 	public void exportSportInvite(@Parameter(hidden = true) @RequestParam Map<String, Object> sportInvite,
-								  BladeUser bladeUser,
-								  HttpServletResponse response) {
+		BladeUser bladeUser, HttpServletResponse response) {
 		QueryWrapper<SportInviteEntity> queryWrapper = Condition.getQueryWrapper(sportInvite, SportInviteEntity.class);
 		List<SportInviteExcel> list = sportInviteService.exportSportInvite(queryWrapper);
 		ExcelUtil.export(response, "绿动有约数据" + DateUtil.time(), "绿动有约数据表", list, SportInviteExcel.class);
 	}
 
 	private Long resolveLong(Long queryValue, Map<String, Object> body, String key) {
-		if (queryValue != null) {
-			return queryValue;
-		}
-		if (body == null || body.get(key) == null) {
-			return null;
-		}
+		if (queryValue != null) return queryValue;
+		if (body == null || body.get(key) == null) return null;
 		try {
 			return Long.valueOf(String.valueOf(body.get(key)));
 		} catch (NumberFormatException ignored) {
@@ -202,12 +214,8 @@ public class SportInviteController extends BladeController {
 	}
 
 	private String resolveString(String queryValue, Map<String, Object> body, String key) {
-		if (queryValue != null) {
-			return queryValue;
-		}
-		if (body == null || body.get(key) == null) {
-			return null;
-		}
+		if (queryValue != null) return queryValue;
+		if (body == null || body.get(key) == null) return null;
 		return String.valueOf(body.get(key));
 	}
 }
