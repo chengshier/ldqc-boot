@@ -162,8 +162,10 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 			return dynamicContentAutoAuditService.retryMediaTask(taskId, nextAttempt);
 		}
 
+		int scene = DynamicContentAutoAuditService.BIZ_TEXT.equalsIgnoreCase(claimedTask.getBizType())
+			? WechatContentAuditService.SCENE_UGC : WechatContentAuditService.SCENE_COMMENT;
 		WechatContentAuditService.AuditResult result = wechatContentAuditService.auditText(
-			claimedTask.getUserId(), claimedTask.getContentSnapshot());
+			claimedTask.getUserId(), claimedTask.getContentSnapshot(), scene);
 		if (result.status() == RETRY) {
 			boolean exhausted = nextAttempt >= MAX_ATTEMPTS;
 			claimedTask.setAuditStatus(exhausted ? MANUAL_REQUIRED : RETRY);
