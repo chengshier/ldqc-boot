@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * 微信小程序官方内容安全接口。
  *
  * <p>文本使用 msg_sec_check 同步判断；图片与社区短视频封面使用
- * media_check_async 异步检测。这里只接入微信官方免费能力，不调用腾讯云或其他收费审核服务。</p>
+ * media_check_async 异步检测。这里只接入微信官方能力，不调用腾讯云或其他收费审核服务。</p>
  */
 @Slf4j
 @Service
@@ -33,6 +33,10 @@ public class WechatContentAuditService {
 	public static final byte REJECTED = 2;
 	public static final byte RETRY = 3;
 	public static final byte MANUAL_REQUIRED = 4;
+
+	/** 微信场景枚举：2 评论；3 论坛/UGC。 */
+	public static final int SCENE_COMMENT = 2;
+	public static final int SCENE_UGC = 3;
 
 	private static final String TOKEN_CACHE_KEY = "wechat:content-audit:access-token";
 	private static final String TEXT_CHECK_URL = "https://api.weixin.qq.com/wxa/msg_sec_check?access_token=";
@@ -56,11 +60,16 @@ public class WechatContentAuditService {
 
 	/** 兼容原评论审核调用。 */
 	public AuditResult audit(Long userId, String content) {
-		return auditText(userId, content);
+		return auditText(userId, content, SCENE_COMMENT);
+	}
+
+	/** 默认按评论场景审核文本。 */
+	public AuditResult auditText(Long userId, String content) {
+		return auditText(userId, content, SCENE_COMMENT);
 	}
 
 	/** 同步检测动态文案、评论等文本。 */
-	public AuditResult auditText(Long userId, String content) {
+	public AuditResult auditText(Long userId, String content, int scene) {
 		try {
 			String openId = resolveOpenId(userId);
 			if (openId == null) {
@@ -69,7 +78,7 @@ public class WechatContentAuditService {
 			Map<String, Object> body = new LinkedHashMap<>();
 			body.put("content", content == null ? "" : content);
 			body.put("version", 2);
-			body.put("scene", 2);
+			body.put("scene", normalizeScene(scene));
 			body.put("openid", openId);
 			JsonNode response = postJson(TEXT_CHECK_URL + token(), body);
 			if (response.path("errcode").asInt(-1) != 0) {
@@ -78,9 +87,14 @@ public class WechatContentAuditService {
 			return fromSuggest(response.path("result").path("suggest").asText(),
 				response.path("trace_id").asText(null), "文本内容");
 		} catch (Exception exception) {
-			log.error("微信文本内容审核失败，userId={}", userId, exception);
+			log.error("微信文本内容审核失败，userId={}，scene={}", userId, scene, exception);
 			return AuditResult.retry("微信文本审核服务暂不可用");
 		}
+	}
+
+	/** 默认按评论场景提交媒体。动态内容应显式传入 SCENE_UGC。 */
+	public AuditResult submitMedia(Long userId, String mediaUrl, int mediaType) {
+		return submitMedia(userId, mediaUrl, mediaType, SCENE_COMMENT);
 	}
 
 	/**
@@ -88,7 +102,7 @@ public class WechatContentAuditService {
 	 *
 	 * @param mediaType 1=音频，2=图片；本项目第一阶段只提交图片，因此固定传 2。
 	 */
-	public AuditResult submitMedia(Long userId, String mediaUrl, int mediaType) {
+	public AuditResult submitMedia(Long userId, String mediaUrl, int mediaType, int scene) {
 		if (!isHttpUrl(mediaUrl)) {
 			return AuditResult.manual("媒体地址不是微信可访问的 HTTP/HTTPS 地址");
 		}
@@ -101,7 +115,7 @@ public class WechatContentAuditService {
 			body.put("media_url", mediaUrl.trim());
 			body.put("media_type", mediaType);
 			body.put("version", 2);
-			body.put("scene", 2);
+			body.put("scene", normalizeScene(scene));
 			body.put("openid", openId);
 			JsonNode response = postJson(MEDIA_CHECK_URL + token(), body);
 			if (response.path("errcode").asInt(-1) != 0) {
@@ -113,7 +127,7 @@ public class WechatContentAuditService {
 			}
 			return AuditResult.processing(traceId, "已提交微信媒体异步审核");
 		} catch (Exception exception) {
-			log.error("微信媒体内容审核提交失败，userId={}，mediaUrl={}", userId, mediaUrl, exception);
+			log.error("微信媒体内容审核提交失败，userId={}，scene={}，mediaUrl={}", userId, scene, mediaUrl, exception);
 			return AuditResult.retry("微信媒体审核服务暂不可用");
 		}
 	}
@@ -168,6 +182,10 @@ public class WechatContentAuditService {
 		redis.opsForValue().set(TOKEN_CACHE_KEY, accessToken,
 			Math.max(300, response.path("expires_in").asLong(7200) - 300), TimeUnit.SECONDS);
 		return accessToken;
+	}
+
+	private int normalizeScene(int scene) {
+		return scene >= 1 && scene <= 4 ? scene : SCENE_COMMENT;
 	}
 
 	private boolean isHttpUrl(String value) {
