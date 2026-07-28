@@ -20,6 +20,7 @@ import org.springblade.core.secure.utils.AuthUtil;
 import org.springblade.core.tool.api.R;
 import org.springblade.core.tool.utils.DateUtil;
 import org.springblade.core.tool.utils.Func;
+import org.springblade.modules.contentaudit.service.DynamicContentAutoAuditService;
 import org.springblade.modules.imgDetail.excel.ImgDetailExcel;
 import org.springblade.modules.imgDetail.pojo.dto.ImgDetailDTO;
 import org.springblade.modules.imgDetail.pojo.entity.ImgDetailEntity;
@@ -44,19 +45,20 @@ import static io.jsonwebtoken.lang.Strings.hasText;
 /**
  * 社区图文与短视频内容控制器。
  *
- * <p>用户发布、修改重提、查询自己的审核状态和删除自己的内容使用小程序业务接口；
- * 通用 CRUD、审核、下架和导出仅供管理端运营人员使用。</p>
+ * <p>用户发布后优先进入微信文本和媒体自动审核；全部通过后自动公开。
+ * 微信建议复核、接口异常、回调超时或用户举报内容仍由管理端运营人员处理。</p>
  */
 @RestController
 @AllArgsConstructor
 @RequestMapping("blade-imgDetail/imgDetail")
-@Tag(name = "社区内容", description = "社区内容发布、审核、展示和运营接口")
+@Tag(name = "社区内容", description = "社区内容发布、自动审核、人工复核、展示和运营接口")
 public class ImgDetailController extends BladeController {
 
 	private final IImgDetailService imgDetailService;
 	private final ContentPublishWorkflowService contentWorkflowService;
 	private final ContentResubmitService contentResubmitService;
 	private final VideoCoverGenerateTool videoCoverGenerateTool;
+	private final DynamicContentAutoAuditService dynamicContentAutoAuditService;
 
 	@IsAdmin
 	@GetMapping("/detail")
@@ -137,7 +139,7 @@ public class ImgDetailController extends BladeController {
 	@IsAdmin
 	@PostMapping("/audit")
 	@ApiOperationSupport(order = 9)
-	@Operation(summary = "审核或下架内容", description = "action：PASS、REJECT、OFFLINE；驳回和下架必须填写原因")
+	@Operation(summary = "人工复核或下架内容", description = "自动审核异常或微信建议复核时使用；action：PASS、REJECT、OFFLINE")
 	public R audit(@RequestBody Map<String, Object> body) {
 		Long id = Func.toLong(body.get("id"));
 		String action = Func.toStr(body.get("action"), "");
@@ -158,24 +160,26 @@ public class ImgDetailController extends BladeController {
 
 	@PostMapping("/publish")
 	@ApiOperationSupport(order = 11)
-	@Operation(summary = "发布社区内容", description = "只用于底部发布的图文和短视频，发布后进入待审核")
+	@Operation(summary = "发布社区内容", description = "保存后自动进行微信文本、图片或视频封面审核，异常内容转人工")
 	public R<Long> publish(@RequestBody ImgDetailDTO request) {
 		Long id = contentWorkflowService.submit(request, AuthUtil.getUserId());
 		ImgDetailEntity content = imgDetailService.getById(id);
 		if (content != null && shouldGenerateVideoPoster(content)) {
 			videoCoverGenerateTool.generateCoverAsync(content);
 		}
+		dynamicContentAutoAuditService.startSubmissionAsync(id);
 		return R.data(id);
 	}
 
 	@PostMapping("/resubmit")
 	@ApiOperationSupport(order = 12)
-	@Operation(summary = "修改后重新提交", description = "仅作者可以修改审核拒绝或已下架的内容并重新进入审核")
+	@Operation(summary = "修改后重新提交", description = "重新生成当前内容快照的微信自动审核任务")
 	public R<Long> resubmit(@RequestBody ImgDetailDTO request) {
 		ImgDetailEntity content = contentResubmitService.resubmit(request, AuthUtil.getUserId());
 		if (shouldGenerateVideoPoster(content)) {
 			videoCoverGenerateTool.generateCoverAsync(content);
 		}
+		dynamicContentAutoAuditService.startSubmissionAsync(content.getId());
 		return R.data(content.getId());
 	}
 
