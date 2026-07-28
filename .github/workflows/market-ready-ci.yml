@@ -3,6 +3,8 @@ name: Market-ready backend compile
 on:
   pull_request:
     branches: [master]
+  push:
+    branches: [refactor/market-ready-phase1]
   workflow_dispatch:
 
 permissions:
