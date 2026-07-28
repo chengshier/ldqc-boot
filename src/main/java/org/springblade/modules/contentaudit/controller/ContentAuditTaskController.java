@@ -23,18 +23,18 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** 评论审核异常任务运营接口。 */
+/** 动态文案、媒体与评论的自动审核异常运营接口。 */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("blade-contentaudit/task")
-@Tag(name = "内容审核异常", description = "自动重试失败后的评论审核异常待办")
+@Tag(name = "内容自动审核异常", description = "微信自动审核重试、复核与人工判定")
 public class ContentAuditTaskController {
 
 	private final IContentAuditTaskService auditTaskService;
 
 	@IsAdmin
 	@GetMapping("/page")
-	@Operation(summary = "异常任务分页")
+	@Operation(summary = "异常任务分页", description = "默认显示自动重试中和待人工处理的动态文案、媒体及评论任务")
 	public R<IPage<ContentAuditTask>> page(Query query,
 		@RequestParam(required = false) String bizType,
 		@RequestParam(required = false) Byte auditStatus) {
@@ -67,7 +67,7 @@ public class ContentAuditTaskController {
 
 	@IsAdmin
 	@PostMapping("/retry-now")
-	@Operation(summary = "立即重新审核")
+	@Operation(summary = "立即重新审核", description = "文本重新同步检测，媒体重新提交异步检测")
 	public R retryNow(@RequestBody Map<String, Object> body) {
 		Long taskId = Func.toLong(body.get("taskId"));
 		return R.status(auditTaskService.retryNow(taskId));
@@ -75,7 +75,7 @@ public class ContentAuditTaskController {
 
 	@IsAdmin
 	@PostMapping("/resolve")
-	@Operation(summary = "人工通过或拒绝")
+	@Operation(summary = "人工通过或拒绝", description = "动态任务处理后会重新汇总整条动态，全部通过才公开")
 	public R resolve(@RequestBody Map<String, Object> body) {
 		Long taskId = Func.toLong(body.get("taskId"));
 		String action = Func.toStr(body.get("action"));
