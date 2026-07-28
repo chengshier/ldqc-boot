@@ -27,7 +27,8 @@ import java.util.regex.Pattern;
  * 微信小程序媒体内容安全异步回调。
  *
  * <p>第一阶段使用微信后台的明文消息模式，按照 token、timestamp、nonce 校验签名。
- * 回调只根据微信返回的 trace_id 更新已存在的审核任务，不接受客户端指定内容ID。</p>
+ * 回调只根据微信返回的 trace_id 更新已存在的审核任务，不接受客户端指定内容ID。
+ * 同时兼容新版 result.suggest 与旧版 isrisky/status_code 回调字段。</p>
  */
 @Slf4j
 @RestController
@@ -58,12 +59,13 @@ public class WechatMediaAuditCallbackController {
 						   @RequestBody(required = false) String body) {
 		verifySignature(Func.isNotBlank(signature) ? signature : messageSignature, timestamp, nonce);
 		CallbackPayload payload = parsePayload(body);
-		if (Func.isBlank(payload.traceId()) || Func.isBlank(payload.suggest())) {
-			log.warn("微信媒体审核回调缺少 trace_id 或 suggest，body={}", safeBody(body));
+		if (Func.isBlank(payload.traceId())
+			|| Func.isBlank(payload.suggest()) && payload.statusCode() == null) {
+			log.warn("微信媒体审核回调缺少 trace_id 或审核结果，body={}", safeBody(body));
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid callback payload");
 		}
 		boolean handled = dynamicContentAutoAuditService.handleMediaCallback(
-			payload.traceId(), payload.suggest(), payload.reason());
+			payload.traceId(), payload.suggest(), payload.reason(), payload.statusCode());
 		if (!handled) {
 			log.warn("微信媒体审核回调未匹配任务，traceId={}", payload.traceId());
 		}
@@ -89,31 +91,64 @@ public class WechatMediaAuditCallbackController {
 
 	private CallbackPayload parsePayload(String body) {
 		if (Func.isBlank(body)) {
-			return new CallbackPayload(null, null, null);
+			return new CallbackPayload(null, null, null, null);
 		}
 		String value = body.trim();
 		if (value.startsWith("{")) {
 			try {
 				JsonNode root = objectMapper.readTree(value);
-				String traceId = firstText(root, "trace_id", "traceId");
 				JsonNode result = root.path("result");
+				String traceId = firstText(root, "trace_id", "traceId");
 				if (Func.isBlank(traceId)) traceId = firstText(result, "trace_id", "traceId");
+
 				String suggest = firstText(result, "suggest");
 				if (Func.isBlank(suggest)) suggest = firstText(root, "suggest");
+				Integer isRisky = firstInteger(root, "isrisky", "is_risky");
+				if (isRisky == null) isRisky = firstInteger(result, "isrisky", "is_risky");
+				if (Func.isBlank(suggest) && isRisky != null) {
+					suggest = isRisky == 0 ? "pass" : "risky";
+				}
+
+				Integer statusCode = firstInteger(root, "status_code", "statusCode");
+				if (statusCode == null) statusCode = firstInteger(result, "status_code", "statusCode");
 				String label = firstText(result, "label");
-				String reason = Func.isBlank(label) ? null : "微信媒体审核标签：" + label;
-				return new CallbackPayload(traceId, suggest, reason);
+				if (Func.isBlank(label)) label = firstText(root, "label");
+				String extra = firstText(root, "extra_info_json", "extraInfoJson");
+				String reason = buildReason(label, extra, statusCode);
+				return new CallbackPayload(traceId, suggest, reason, statusCode);
 			} catch (Exception exception) {
 				log.warn("解析微信媒体审核 JSON 回调失败", exception);
-				return new CallbackPayload(null, null, null);
+				return new CallbackPayload(null, null, null, null);
 			}
 		}
+
 		// 兼容微信后台选择 XML 消息格式时的基础字段。
 		String traceId = xmlTag(value, "trace_id");
 		String suggest = xmlTag(value, "suggest");
+		Integer isRisky = parseInteger(xmlTag(value, "isrisky"));
+		if (Func.isBlank(suggest) && isRisky != null) {
+			suggest = isRisky == 0 ? "pass" : "risky";
+		}
+		Integer statusCode = parseInteger(xmlTag(value, "status_code"));
 		String label = xmlTag(value, "label");
-		return new CallbackPayload(traceId, suggest,
-			Func.isBlank(label) ? null : "微信媒体审核标签：" + label);
+		String extra = xmlTag(value, "extra_info_json");
+		return new CallbackPayload(traceId, suggest, buildReason(label, extra, statusCode), statusCode);
+	}
+
+	private String buildReason(String label, String extra, Integer statusCode) {
+		StringBuilder builder = new StringBuilder();
+		if (statusCode != null && statusCode != 0) {
+			builder.append("微信媒体审核回调异常，status_code=").append(statusCode);
+		}
+		if (Func.isNotBlank(label)) {
+			if (builder.length() > 0) builder.append("；");
+			builder.append("审核标签：").append(label.trim());
+		}
+		if (Func.isNotBlank(extra)) {
+			if (builder.length() > 0) builder.append("；");
+			builder.append(extra.trim());
+		}
+		return builder.length() == 0 ? null : builder.toString();
 	}
 
 	private String firstText(JsonNode node, String... fields) {
@@ -123,6 +158,26 @@ public class WechatMediaAuditCallbackController {
 			if (!value.isEmpty()) return value;
 		}
 		return null;
+	}
+
+	private Integer firstInteger(JsonNode node, String... fields) {
+		if (node == null || node.isMissingNode() || node.isNull()) return null;
+		for (String field : fields) {
+			JsonNode value = node.path(field);
+			if (value.isInt() || value.isLong()) return value.asInt();
+			Integer parsed = parseInteger(value.asText(null));
+			if (parsed != null) return parsed;
+		}
+		return null;
+	}
+
+	private Integer parseInteger(String value) {
+		if (Func.isBlank(value)) return null;
+		try {
+			return Integer.parseInt(value.trim());
+		} catch (NumberFormatException ignored) {
+			return null;
+		}
 	}
 
 	private String xmlTag(String xml, String name) {
@@ -158,6 +213,6 @@ public class WechatMediaAuditCallbackController {
 		return body.length() > 500 ? body.substring(0, 500) : body;
 	}
 
-	private record CallbackPayload(String traceId, String suggest, String reason) {
+	private record CallbackPayload(String traceId, String suggest, String reason, Integer statusCode) {
 	}
 }
