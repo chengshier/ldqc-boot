@@ -1,0 +1,94 @@
+name: Backend business boundary guard
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate server-derived identities
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = {
+              'src/main/java/org/springblade/modules/recommend/controller/RecommendController.java': [
+                  'AuthUtil.getUserId()',
+                  'recommendService.homeFeed(page, limit, currentUserId())',
+              ],
+              'src/main/java/org/springblade/modules/comment/controller/CommentController.java': [
+                  'comment.setUid(currentUserId)',
+                  '只能删除自己的评论',
+              ],
+              'src/main/java/org/springblade/modules/newscomment/controller/NewsCommentController.java': [
+                  'newsComment.setUserId(currentUserId)',
+                  'newsComment.setUsername',
+              ],
+              'src/main/java/org/springblade/modules/sportinvite/service/impl/SportInviteServiceImpl.java': [
+                  'apply.setApplicantUserId(userId)',
+                  'sportInvite.setPublisherUserId(userId)',
+                  'occupySeatOrThrow',
+              ],
+              'src/main/java/org/springblade/modules/recommendfeedback/controller/RecommendFeedbackController.java': [
+                  'AuthUtil.getUserId()',
+              ],
+          }
+          failures = []
+          for file_name, tokens in required.items():
+              path = Path(file_name)
+              if not path.exists():
+                  failures.append(f'Missing file: {file_name}')
+                  continue
+              text = path.read_text(encoding='utf-8')
+              for token in tokens:
+                  if token not in text:
+                      failures.append(f'{file_name} missing boundary marker: {token}')
+          if failures:
+              raise SystemExit('Server identity boundary failed:\n' + '\n'.join(failures))
+          print('Server-derived identity boundaries passed.')
+          PY
+      - name: Validate retired business bypasses
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          violations = []
+          coupon_controllers = list(Path('src/main/java/org/springblade/modules').rglob('*Coupon*Controller.java'))
+          for path in coupon_controllers:
+              text = path.read_text(encoding='utf-8')
+              if '@RequestMapping("/use")' in text or '@PostMapping("/use")' in text:
+                  violations.append(f'Legacy coupon direct-use endpoint: {path}')
+
+          mall_files = list(Path('src/main/java/org/springblade/modules').rglob('*Mall*Controller.java'))
+          for path in mall_files:
+              text = path.read_text(encoding='utf-8')
+              if 'exchangeMallProduct' in text:
+                  violations.append(f'Legacy mall exchange method: {path}')
+
+          venue_boundary = Path('docs/market-ready/venue-booking-deferred-boundary.md')
+          if not venue_boundary.exists():
+              violations.append('Venue booking deferred-boundary document is missing')
+
+          content_audit = Path('src/main/java/org/springblade/modules/contentaudit/service/ContentAuditRetryService.java')
+          if not content_audit.exists():
+              violations.append('Comment audit retry service is missing')
+          else:
+              text = content_audit.read_text(encoding='utf-8')
+              for token in ('MAX_ATTEMPTS', 'MANUAL_REQUIRED', 'nextRetryTime'):
+                  if token not in text:
+                      violations.append(f'Comment audit retry service missing: {token}')
+
+          if violations:
+              raise SystemExit('Retired bypass validation failed:\n' + '\n'.join(violations))
+          print('Retired business bypasses remain closed.')
+          PY
