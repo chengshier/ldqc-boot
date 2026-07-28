@@ -3,6 +3,8 @@ name: Backend business boundary guard
 on:
   pull_request:
     branches: [master]
+  push:
+    branches: [refactor/market-ready-phase1]
   workflow_dispatch:
 
 permissions:
@@ -38,8 +40,9 @@ jobs:
                   'sportInvite.setPublisherUserId(userId)',
                   'occupySeatOrThrow',
               ],
-              'src/main/java/org/springblade/modules/recommendfeedback/controller/RecommendFeedbackController.java': [
+              'src/main/java/org/springblade/modules/recommendfeedback/service/RecommendFeedbackService.java': [
                   'AuthUtil.getUserId()',
+                  'NOT_INTERESTED',
               ],
           }
           failures = []
@@ -55,6 +58,53 @@ jobs:
           if failures:
               raise SystemExit('Server identity boundary failed:\n' + '\n'.join(failures))
           print('Server-derived identity boundaries passed.')
+          PY
+      - name: Validate automatic content audit boundaries
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = {
+              'src/main/java/org/springblade/modules/contentaudit/service/WechatContentAuditService.java': [
+                  'msg_sec_check',
+                  'media_check_async',
+                  '"review".equals(value)',
+              ],
+              'src/main/java/org/springblade/modules/contentaudit/service/DynamicContentAutoAuditService.java': [
+                  'IMG_DETAIL_TEXT',
+                  'IMG_DETAIL_MEDIA',
+                  'allRequiredTasksPassed',
+                  'handleMediaCallback',
+              ],
+              'src/main/java/org/springblade/modules/contentaudit/controller/WechatMediaAuditCallbackController.java': [
+                  'verifySignature',
+                  'WECHAT.message-token',
+                  'trace_id',
+              ],
+              'src/main/java/org/springblade/modules/contentaudit/service/ContentAuditTaskServiceImpl.java': [
+                  'MAX_ATTEMPTS',
+                  'MANUAL_REQUIRED',
+                  'PROCESSING_TIMEOUT',
+              ],
+              'src/main/java/org/springblade/modules/imgDetail/controller/ImgDetailController.java': [
+                  'startSubmissionAsync',
+                  '人工复核或下架内容',
+              ],
+          }
+          failures = []
+          for file_name, tokens in required.items():
+              path = Path(file_name)
+              if not path.exists():
+                  failures.append(f'Missing file: {file_name}')
+                  continue
+              text = path.read_text(encoding='utf-8')
+              for token in tokens:
+                  if token not in text:
+                      failures.append(f'{file_name} missing automatic-audit marker: {token}')
+          if failures:
+              raise SystemExit('Automatic content audit boundary failed:\n' + '\n'.join(failures))
+          print('Automatic content audit boundaries passed.')
           PY
       - name: Validate retired business bypasses
         shell: bash
@@ -75,18 +125,12 @@ jobs:
               if 'exchangeMallProduct' in text:
                   violations.append(f'Legacy mall exchange method: {path}')
 
-          venue_boundary = Path('docs/market-ready/venue-booking-deferred-boundary.md')
-          if not venue_boundary.exists():
+          if not Path('docs/market-ready/venue-booking-deferred-boundary.md').exists():
               violations.append('Venue booking deferred-boundary document is missing')
-
-          content_audit = Path('src/main/java/org/springblade/modules/contentaudit/service/ContentAuditRetryService.java')
-          if not content_audit.exists():
-              violations.append('Comment audit retry service is missing')
-          else:
-              text = content_audit.read_text(encoding='utf-8')
-              for token in ('MAX_ATTEMPTS', 'MANUAL_REQUIRED', 'nextRetryTime'):
-                  if token not in text:
-                      violations.append(f'Comment audit retry service missing: {token}')
+          if not Path('docs/market-ready/dynamic-content-wechat-audit.md').exists():
+              violations.append('Dynamic content WeChat audit guide is missing')
+          if not Path('doc/sql/dynamic_content_auto_audit_upgrade.sql').exists():
+              violations.append('Dynamic content audit SQL upgrade is missing')
 
           if violations:
               raise SystemExit('Retired bypass validation failed:\n' + '\n'.join(violations))
