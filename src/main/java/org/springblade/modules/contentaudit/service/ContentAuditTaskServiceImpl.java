@@ -31,15 +31,18 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTaskMapper, ContentAuditTask> implements IContentAuditTaskService {
 
-	public static final byte PROCESSING = 0;
+	public static final byte PROCESSING = WechatContentAuditService.PROCESSING;
 	public static final byte PASSED = WechatContentAuditService.PASSED;
 	public static final byte REJECTED = WechatContentAuditService.REJECTED;
 	public static final byte RETRY = WechatContentAuditService.RETRY;
-	public static final byte MANUAL_REQUIRED = 4;
+	public static final byte MANUAL_REQUIRED = WechatContentAuditService.MANUAL_REQUIRED;
 	private static final int MAX_ATTEMPTS = 5;
 
 	@Autowired
 	private WechatContentAuditService wechatContentAuditService;
+	@Autowired
+	@Lazy
+	private DynamicContentAutoAuditService dynamicContentAutoAuditService;
 	@Autowired
 	@Lazy
 	private ICommentService commentService;
@@ -60,12 +63,25 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 	public int retryDueTasks(int batchSize) {
 		int safeBatchSize = Math.max(1, Math.min(batchSize, 100));
 		Date now = new Date();
+
+		// 进程中断或微信媒体回调超时的任务重新进入重试队列。
+		this.update(Wrappers.<ContentAuditTask>lambdaUpdate()
+			.eq(ContentAuditTask::getAuditStatus, PROCESSING)
+			.eq(ContentAuditTask::getIsDeleted, 0)
+			.isNotNull(ContentAuditTask::getNextRetryTime)
+			.le(ContentAuditTask::getNextRetryTime, now)
+			.set(ContentAuditTask::getAuditStatus, RETRY)
+			.set(ContentAuditTask::getProviderTraceId, null)
+			.set(ContentAuditTask::getResultCode, "PROCESSING_TIMEOUT")
+			.set(ContentAuditTask::getResultMessage, "自动审核处理或回调超时，准备重新提交"));
+
 		this.update(Wrappers.<ContentAuditTask>lambdaUpdate()
 			.eq(ContentAuditTask::getAuditStatus, RETRY)
 			.ge(ContentAuditTask::getAttemptCount, MAX_ATTEMPTS)
 			.eq(ContentAuditTask::getIsDeleted, 0)
 			.set(ContentAuditTask::getAuditStatus, MANUAL_REQUIRED)
 			.set(ContentAuditTask::getNextRetryTime, null)
+			.set(ContentAuditTask::getResultCode, "RETRY_EXHAUSTED")
 			.set(ContentAuditTask::getResultMessage, "自动审核连续失败，等待运营人员处理"));
 
 		List<ContentAuditTask> tasks = this.list(Wrappers.<ContentAuditTask>lambdaQuery()
@@ -111,13 +127,16 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 		String resultReason = Func.isBlank(reason)
 			? (resultStatus == PASSED ? "运营人员人工审核通过" : "运营人员人工审核拒绝")
 			: reason.trim();
-		applyBusinessResult(task, resultStatus, resultReason);
 		task.setAuditStatus(resultStatus);
 		task.setResultCode("MANUAL_" + normalizedAction);
 		task.setResultMessage(resultReason);
 		task.setNextRetryTime(null);
 		task.setAuditTime(new Date());
-		return this.updateById(task);
+		boolean updated = this.updateById(task);
+		if (updated) {
+			applyBusinessResult(task, resultStatus, resultReason);
+		}
+		return updated;
 	}
 
 	private boolean processTask(Long taskId, boolean force) {
@@ -134,11 +153,16 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 			.eq(ContentAuditTask::getIsDeleted, 0)
 			.set(ContentAuditTask::getAuditStatus, PROCESSING)
 			.set(ContentAuditTask::getAttemptCount, nextAttempt)
-			.set(ContentAuditTask::getNextRetryTime, new Date(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(5))));
+			.set(ContentAuditTask::getNextRetryTime,
+				new Date(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(5))));
 		if (!claimed) return false;
 
 		ContentAuditTask claimedTask = requireTask(taskId);
-		WechatContentAuditService.AuditResult result = wechatContentAuditService.audit(
+		if (DynamicContentAutoAuditService.BIZ_MEDIA.equalsIgnoreCase(claimedTask.getBizType())) {
+			return dynamicContentAutoAuditService.retryMediaTask(taskId, nextAttempt);
+		}
+
+		WechatContentAuditService.AuditResult result = wechatContentAuditService.auditText(
 			claimedTask.getUserId(), claimedTask.getContentSnapshot());
 		if (result.status() == RETRY) {
 			boolean exhausted = nextAttempt >= MAX_ATTEMPTS;
@@ -149,19 +173,33 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 				: Func.toStr(result.reason(), "审核服务暂不可用"));
 			claimedTask.setNextRetryTime(exhausted ? null : nextRetryTime(nextAttempt));
 			claimedTask.setAuditTime(null);
-			return this.updateById(claimedTask);
+			boolean updated = this.updateById(claimedTask);
+			if (exhausted && isDynamicTask(claimedTask)) {
+				dynamicContentAutoAuditService.reconcile(claimedTask.getBizId());
+			}
+			return updated;
 		}
 
-		applyBusinessResult(claimedTask, result.status(), result.reason());
 		claimedTask.setAuditStatus(result.status());
-		claimedTask.setResultCode(result.status() == PASSED ? "PASSED" : "REJECTED");
+		claimedTask.setProviderTraceId(result.traceId());
+		claimedTask.setResultCode(result.status() == PASSED ? "PASSED"
+			: result.status() == REJECTED ? "REJECTED" : "MANUAL_REQUIRED");
 		claimedTask.setResultMessage(result.reason());
 		claimedTask.setNextRetryTime(null);
 		claimedTask.setAuditTime(new Date());
-		return this.updateById(claimedTask);
+		boolean updated = this.updateById(claimedTask);
+		if (updated) {
+			applyBusinessResult(claimedTask, result.status(), result.reason());
+		}
+		return updated;
 	}
 
 	private void applyBusinessResult(ContentAuditTask task, byte status, String reason) {
+		if (DynamicContentAutoAuditService.BIZ_TEXT.equalsIgnoreCase(task.getBizType())
+			|| DynamicContentAutoAuditService.BIZ_MEDIA.equalsIgnoreCase(task.getBizType())) {
+			dynamicContentAutoAuditService.reconcile(task.getBizId());
+			return;
+		}
 		if ("TREND_COMMENT".equalsIgnoreCase(task.getBizType())) {
 			applyTrendCommentResult(task, status, reason);
 			return;
@@ -181,7 +219,7 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 		Date now = new Date();
 		boolean changed = commentService.update(Wrappers.<CommentEntity>lambdaUpdate()
 			.eq(CommentEntity::getId, comment.getId())
-			.eq(CommentEntity::getAuditStatus, RETRY)
+			.in(CommentEntity::getAuditStatus, RETRY, MANUAL_REQUIRED)
 			.set(CommentEntity::getAuditStatus, status)
 			.set(CommentEntity::getAuditReason, reason)
 			.set(CommentEntity::getAuditTime, now));
@@ -201,7 +239,7 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 		Date now = new Date();
 		boolean changed = newsCommentService.update(Wrappers.<NewsCommentEntity>lambdaUpdate()
 			.eq(NewsCommentEntity::getId, comment.getId())
-			.eq(NewsCommentEntity::getCommentStatus, RETRY)
+			.in(NewsCommentEntity::getCommentStatus, RETRY, MANUAL_REQUIRED)
 			.set(NewsCommentEntity::getCommentStatus, status)
 			.set(NewsCommentEntity::getAuditReason, reason)
 			.set(NewsCommentEntity::getAuditTime, now));
@@ -226,6 +264,11 @@ public class ContentAuditTaskServiceImpl extends BaseServiceImpl<ContentAuditTas
 		message.setBizId(task.getBizId());
 		message.setReadStatus((byte) 0);
 		userMessageService.save(message);
+	}
+
+	private boolean isDynamicTask(ContentAuditTask task) {
+		return task != null && (DynamicContentAutoAuditService.BIZ_TEXT.equalsIgnoreCase(task.getBizType())
+			|| DynamicContentAutoAuditService.BIZ_MEDIA.equalsIgnoreCase(task.getBizType()));
 	}
 
 	private ContentAuditTask requireTask(Long taskId) {
