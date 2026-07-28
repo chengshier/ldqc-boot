@@ -49,7 +49,7 @@ public class RecommendFeedbackService {
 		event.setContentType(contentType);
 		event.setContentId(contentId);
 		event.setEventType(eventType);
-		event.setDurationMs(Math.max(0L, Func.toLong(body.get("durationMs"), 0L)));
+		event.setDurationMs(parseNonNegativeLong(body.get("durationMs")));
 		event.setExtraJson(clean(body.get("extraJson"), 2000));
 		event.setOccurredAt(new Date());
 		try {
@@ -89,10 +89,22 @@ public class RecommendFeedbackService {
 			double score = 0;
 			if ("CLICK".equals(record.getEventType())) score = 4;
 			else if ("VIDEO_COMPLETE".equals(record.getEventType())) score = 12;
-			else if ("DWELL".equals(record.getEventType())) score = Math.min(Math.max(record.getDurationMs() == null ? 0 : record.getDurationMs(), 0) / 10000.0, 8);
+			else if ("DWELL".equals(record.getEventType())) {
+				long duration = record.getDurationMs() == null ? 0 : Math.max(record.getDurationMs(), 0);
+				score = Math.min(duration / 10000.0, 8);
+			}
 			result.merge(record.getContentId(), score, Double::sum);
 		}
 		return result;
+	}
+
+	private long parseNonNegativeLong(Object value) {
+		if (value == null || Func.isBlank(String.valueOf(value))) return 0L;
+		try {
+			return Math.max(Long.parseLong(String.valueOf(value)), 0L);
+		} catch (NumberFormatException ignored) {
+			return 0L;
+		}
 	}
 
 	private String normalize(Object value, String defaultValue) {
