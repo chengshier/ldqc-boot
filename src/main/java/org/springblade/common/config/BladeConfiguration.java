@@ -40,6 +40,7 @@ public class BladeConfiguration implements WebMvcConfigurer {
 				"/webjars/**",
 				"/swagger-resources/**",
 				"/druid/**",
+				"/blade-contentaudit/wechat/media-callback",
 				"/blade-imgDetail/imgDetail/getHot",
 				"/blade-imgDetail/imgDetail/getOne",
 				"/blade-recommend/recommendToUserByCF",
