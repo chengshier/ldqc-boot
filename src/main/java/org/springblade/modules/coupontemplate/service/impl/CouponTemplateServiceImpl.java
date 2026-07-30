@@ -37,6 +37,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMapper, CouponTemplateEntity> implements ICouponTemplateService {
 
+	private static final String VALID_TYPE_FIXED = "FIXED";
+	private static final String VALID_TYPE_RELATIVE = "RELATIVE";
+
 	private final IUserCouponService userCouponService;
 	private final ICouponReceiveLogService couponReceiveLogService;
 	private final IPointsAccountService pointsAccountService;
@@ -82,7 +85,6 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 			.last("limit 1"));
 		if (idempotent != null && Func.equals(idempotent.getStatus(), 1)) return "领取成功";
 
-		// 锁定模板行，使库存扣减、用户限领和积分兑换在同一模板内串行完成。
 		CouponTemplateEntity template = this.getOne(Wrappers.<CouponTemplateEntity>lambdaQuery()
 			.eq(CouponTemplateEntity::getId, templateId)
 			.eq(CouponTemplateEntity::getIsDeleted, 0)
@@ -104,6 +106,8 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 		if (costPoints > 0 && (account == null || account.getAvailablePoints() == null || account.getAvailablePoints() < costPoints)) {
 			return "绿豆不足";
 		}
+
+		ValidityWindow validity = resolveValidity(template, new Date());
 
 		boolean reserved = this.update(Wrappers.<CouponTemplateEntity>lambdaUpdate()
 			.eq(CouponTemplateEntity::getId, templateId)
@@ -135,29 +139,16 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 			pointsLedgerService.save(ledger);
 		}
 
-		Date now = new Date();
-		Date startAt = now;
-		Date endAt;
-		if ("FIXED".equalsIgnoreCase(template.getValidType())) {
-			startAt = template.getValidStartAt() == null ? now : template.getValidStartAt();
-			endAt = template.getValidEndAt();
-		} else {
-			Calendar calendar = Calendar.getInstance();
-			calendar.setTime(now);
-			calendar.add(Calendar.DAY_OF_MONTH, template.getValidDays() == null || template.getValidDays() <= 0 ? 30 : template.getValidDays());
-			endAt = calendar.getTime();
-		}
-		if (endAt == null || !endAt.after(now)) throw new ServiceException("券模板有效期配置不正确");
-
 		UserCouponEntity userCoupon = new UserCouponEntity();
 		userCoupon.setUserId(userId);
 		userCoupon.setCouponTemplateId(templateId);
 		userCoupon.setCouponNo(buildCouponNo());
 		userCoupon.setCouponStatus("UNUSED");
+		userCoupon.setStatus(1);
 		userCoupon.setRemainDurationMinutes(template.getDurationMinutes());
 		userCoupon.setRemainTimes(template.getTotalTimes());
-		userCoupon.setValidStartAt(startAt);
-		userCoupon.setValidEndAt(endAt);
+		userCoupon.setValidStartAt(validity.startAt());
+		userCoupon.setValidEndAt(validity.endAt());
 		userCouponService.save(userCoupon);
 
 		CouponReceiveLogEntity log = new CouponReceiveLogEntity();
@@ -181,9 +172,9 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 		if (template.getReceiveStartAt() != null && now.before(template.getReceiveStartAt())) return "领取尚未开始";
 		if (template.getReceiveEndAt() != null && now.after(template.getReceiveEndAt())) return "领取已结束";
 		if (template.getRemainStock() == null || template.getRemainStock() <= 0) return "库存不足";
-		if ("FIXED".equalsIgnoreCase(template.getValidType()) && template.getValidEndAt() != null && !template.getValidEndAt().after(now)) {
-			return "优惠券已过有效期";
-		}
+
+		String validityError = validityError(template, now);
+		if (validityError != null) return validityError;
 
 		PointsAccountEntity account = pointsAccountService.getOne(Wrappers.<PointsAccountEntity>lambdaQuery()
 			.eq(PointsAccountEntity::getUserId, userId)
@@ -200,6 +191,42 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 		return null;
 	}
 
+	private String validityError(CouponTemplateEntity template, Date now) {
+		String validType = normalizeValidType(template.getValidType());
+		if (VALID_TYPE_FIXED.equals(validType)) {
+			if (template.getValidEndAt() == null) return "券模板固定有效期未配置结束时间";
+			if (template.getValidStartAt() != null && !template.getValidEndAt().after(template.getValidStartAt())) {
+				return "券模板固定有效期开始时间必须早于结束时间";
+			}
+			if (!template.getValidEndAt().after(now)) return "优惠券已过有效期";
+			return null;
+		}
+		if (VALID_TYPE_RELATIVE.equals(validType)) {
+			if (template.getValidDays() == null || template.getValidDays() <= 0) return "券模板领取后有效天数未配置";
+			return null;
+		}
+		return "券模板有效期类型配置错误";
+	}
+
+	private ValidityWindow resolveValidity(CouponTemplateEntity template, Date now) {
+		String validType = normalizeValidType(template.getValidType());
+		if (VALID_TYPE_FIXED.equals(validType)) {
+			Date startAt = template.getValidStartAt() == null || template.getValidStartAt().before(now) ? now : template.getValidStartAt();
+			return new ValidityWindow(startAt, template.getValidEndAt());
+		}
+		if (VALID_TYPE_RELATIVE.equals(validType)) {
+			Calendar calendar = Calendar.getInstance();
+			calendar.setTime(now);
+			calendar.add(Calendar.DAY_OF_MONTH, template.getValidDays());
+			return new ValidityWindow(now, calendar.getTime());
+		}
+		throw new ServiceException("券模板有效期类型配置错误");
+	}
+
+	private String normalizeValidType(String value) {
+		return Func.toStr(value, "").trim().toUpperCase(Locale.ROOT);
+	}
+
 	private long countReceived(Long userId, Long templateId) {
 		return userCouponService.count(Wrappers.<UserCouponEntity>lambdaQuery()
 			.eq(UserCouponEntity::getUserId, userId)
@@ -209,5 +236,8 @@ public class CouponTemplateServiceImpl extends BaseServiceImpl<CouponTemplateMap
 
 	private String buildCouponNo() {
 		return "CP" + System.currentTimeMillis() + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase(Locale.ROOT);
+	}
+
+	private record ValidityWindow(Date startAt, Date endAt) {
 	}
 }
