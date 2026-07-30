@@ -16,6 +16,11 @@ UPDATE blade_menu
  WHERE code = 'trainingCourseWorkbench';
 
 UPDATE blade_menu
+   SET path = '/training/courseReview',
+       is_deleted = 0
+ WHERE code = 'trainingCourseReview';
+
+UPDATE blade_menu
    SET path = '/mall/productManager',
        is_deleted = 0
  WHERE code = 'mallProductManager';
@@ -33,7 +38,7 @@ UPDATE blade_menu SET path = '/venueapply/venueApply', is_deleted = 0 WHERE code
 SELECT id, parent_id, code, name, path, category, is_open, is_deleted
   FROM blade_menu
  WHERE code IN (
-     'trainingOperation','trainingCourseManager','trainingCourseWorkbench',
+     'trainingOperation','trainingCourseManager','trainingCourseWorkbench','trainingCourseReview',
      'mallOperation','mallProductManager','mallFulfillmentWorkbench',
      'contentModeration','contentAuditExceptions','venueApplyAudit'
  )
