@@ -62,6 +62,67 @@ jobs:
               raise SystemExit('Server identity boundary failed:\n' + '\n'.join(failures))
           print('Server-derived identity boundaries passed.')
           PY
+      - name: Validate BladeX base-field and business-status boundaries
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = {
+              'doc/sql/training-video-course-migration.sql': [
+                  'CREATE TABLE IF NOT EXISTS ldqc_training_access',
+                  'CREATE TABLE IF NOT EXISTS ldqc_training_progress',
+                  'status int NOT NULL DEFAULT 1',
+                  'create_dept bigint DEFAULT NULL',
+              ],
+              'doc/sql/coupon-security-migration.sql': [
+                  '`create_dept` bigint DEFAULT NULL',
+                  '`tenant_id` varchar(12) NOT NULL DEFAULT',
+              ],
+              'doc/sql/coupon_verify_log_runtime_fix.sql': [
+                  "'verify_status'",
+                  "'create_dept'",
+                  'idx_coupon_verify_log_coupon_status',
+              ],
+              'doc/sql/blade_base_fields_compatibility_upgrade.sql': [
+                  "CALL ensure_blade_fields('ldqc_training_access')",
+                  "CALL ensure_blade_fields('coupon_verifier_scope')",
+                  "CALL ensure_blade_fields('mall_exchange_order')",
+              ],
+              'doc/sql/mall_exchange_order_status_runtime_fix.sql': [
+                  "'order_status'",
+                  'MODIFY COLUMN status int NOT NULL DEFAULT 1',
+              ],
+              'doc/sql/market_ready_phase1_schema_validation.sql': [
+                  'BladeX 基础字段矩阵',
+                  '业务状态误用',
+              ],
+          }
+          failures = []
+          for file_name, tokens in required.items():
+              path = Path(file_name)
+              if not path.exists():
+                  failures.append(f'Missing file: {file_name}')
+                  continue
+              text = path.read_text(encoding='utf-8')
+              for token in tokens:
+                  if token not in text:
+                      failures.append(f'{file_name} missing schema marker: {token}')
+
+          mall_entity = Path('src/main/java/org/springblade/modules/mallexchangeorder/pojo/entity/MallExchangeOrderEntity.java')
+          if not mall_entity.exists():
+              failures.append(f'Missing file: {mall_entity}')
+          else:
+              text = mall_entity.read_text(encoding='utf-8')
+              if '@TableField("status")' in text:
+                  failures.append('MallExchangeOrderEntity still maps business order status to BladeX status')
+              if 'private String orderStatus;' not in text:
+                  failures.append('MallExchangeOrderEntity missing dedicated orderStatus field')
+
+          if failures:
+              raise SystemExit('BladeX schema boundary failed:\n' + '\n'.join(failures))
+          print('BladeX base fields and business-status boundaries passed.')
+          PY
       - name: Validate automatic content audit boundaries
         shell: bash
         run: |
