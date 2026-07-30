@@ -26,6 +26,8 @@ jobs:
               'src/main/java/org/springblade/modules/recommend/controller/RecommendController.java': [
                   'AuthUtil.getUserId()',
                   'recommendService.homeFeed(page, limit, currentUserId())',
+                  '@PostMapping("/feedback")',
+                  'recommendFeedbackService.record(request, currentUserId())',
               ],
               'src/main/java/org/springblade/modules/comment/controller/CommentController.java': [
                   'comment.setUid(currentUserId)',
@@ -41,7 +43,7 @@ jobs:
                   'occupySeatOrThrow',
               ],
               'src/main/java/org/springblade/modules/recommendfeedback/service/RecommendFeedbackService.java': [
-                  'record(Map<String, Object> body, Long userId)',
+                  'record(RecommendFeedbackRequest request, Long userId)',
                   'event.setUserId(userId)',
                   'NOT_INTERESTED',
               ],
@@ -134,6 +136,6 @@ jobs:
               violations.append('Dynamic content audit SQL upgrade is missing')
 
           if violations:
-              raise SystemExit('Retired bypass validation failed:\n' + '\n'.join(violations))
+              raise SystemExit('Retired business bypass validation failed:\n' + '\n'.join(violations))
           print('Retired business bypasses remain closed.')
           PY
