@@ -1,6 +1,7 @@
 -- 积分商城兑换订单与履约升级
 -- 适用数据库：MySQL 5.7
 -- 优惠券保持独立业务；商城商品履约类型使用 SHIP/PICKUP/VIRTUAL。
+-- 注意：业务订单状态使用 order_status，BladeX 通用 status 只保留数值启停语义。
 
 SET NAMES utf8mb4;
 
@@ -34,7 +35,8 @@ CALL add_column_if_missing('mall_product', 'max_qty_per_order', 'int NOT NULL DE
 CALL add_column_if_missing('mall_product', 'require_address', 'tinyint NOT NULL DEFAULT 1 COMMENT ''是否需要收货地址''');
 CALL add_column_if_missing('mall_product', 'published_at', 'datetime DEFAULT NULL COMMENT ''上架时间''');
 
--- 订单商品快照和履约字段
+-- 订单商品快照、独立业务状态和履约字段
+CALL add_column_if_missing('mall_exchange_order', 'order_status', 'varchar(24) NOT NULL DEFAULT ''CREATED'' COMMENT ''CREATED/SUCCESS/FAILED/CANCELLED/COMPLETED''');
 CALL add_column_if_missing('mall_exchange_order', 'product_code_snapshot', 'varchar(64) DEFAULT NULL COMMENT ''商品编码快照''');
 CALL add_column_if_missing('mall_exchange_order', 'product_name_snapshot', 'varchar(200) DEFAULT NULL COMMENT ''商品名称快照''');
 CALL add_column_if_missing('mall_exchange_order', 'cover_url_snapshot', 'varchar(1000) DEFAULT NULL COMMENT ''商品主图快照''');
@@ -79,6 +81,13 @@ SET @sql = IF(
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+SET @sql = IF(
+    EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mall_exchange_order' AND INDEX_NAME = 'idx_mall_order_business_status'),
+    'SELECT 1',
+    'CREATE INDEX idx_mall_order_business_status ON mall_exchange_order(order_status, fulfillment_status, is_deleted, create_time)'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 -- 历史订单尽可能补齐商品快照，商品后续改名或下架不影响历史展示。
 UPDATE mall_exchange_order o
 LEFT JOIN mall_product p ON p.id = o.product_id
@@ -93,5 +102,11 @@ LEFT JOIN mall_product p ON p.id = o.product_id
            WHEN o.delivery_status = 'SENT' THEN 'SENT'
            WHEN o.delivery_status = 'FINISHED' THEN 'COMPLETED'
            ELSE COALESCE(NULLIF(o.fulfillment_status, ''), 'PENDING')
+       END,
+       o.order_status = CASE
+           WHEN UPPER(COALESCE(o.fulfillment_status, '')) = 'COMPLETED' OR o.delivery_status = 'FINISHED' THEN 'COMPLETED'
+           WHEN UPPER(COALESCE(o.fulfillment_status, '')) = 'CANCELLED' THEN 'CANCELLED'
+           WHEN o.fail_reason IS NOT NULL AND TRIM(o.fail_reason) <> '' THEN 'FAILED'
+           ELSE COALESCE(NULLIF(UPPER(o.order_status), ''), 'SUCCESS')
        END
  WHERE o.is_deleted = 0;
