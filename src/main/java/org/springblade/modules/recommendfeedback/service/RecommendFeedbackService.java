@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springblade.core.log.exception.ServiceException;
 import org.springblade.core.tool.utils.Func;
 import org.springblade.modules.recommendfeedback.mapper.RecommendFeedbackMapper;
+import org.springblade.modules.recommendfeedback.pojo.dto.RecommendFeedbackRequest;
 import org.springblade.modules.recommendfeedback.pojo.entity.RecommendFeedbackEntity;
 
 import java.util.Collections;
@@ -30,27 +31,32 @@ public class RecommendFeedbackService {
 
 	private final RecommendFeedbackMapper mapper;
 
+	/**
+	 * 记录推荐反馈。用户身份只取服务端登录态，客户端不能指定 userId。
+	 */
 	@Transactional(rollbackFor = Exception.class)
-	public void record(Map<String, Object> body, Long userId) {
+	public void record(RecommendFeedbackRequest request, Long userId) {
 		if (userId == null || userId <= 0) throw new ServiceException("请先登录后提交推荐反馈");
-		Long contentId = Func.toLong(body.get("contentId"));
+		if (request == null) throw new ServiceException("推荐反馈参数不能为空");
+
+		Long contentId = request.getContentId();
 		if (contentId == null || contentId <= 0) throw new ServiceException("缺少推荐内容ID");
-		String contentType = normalize(body.get("contentType"), "CONTENT");
-		String eventType = normalize(body.get("eventType"), "");
+		String contentType = normalize(request.getContentType(), "CONTENT");
+		String eventType = normalize(request.getEventType(), "");
 		if (!CONTENT_TYPES.contains(contentType)) throw new ServiceException("推荐内容类型不正确");
 		if (!EVENT_TYPES.contains(eventType)) throw new ServiceException("推荐反馈类型不正确");
 
-		String requestId = clean(body.get("requestId"), 64);
+		String requestId = clean(request.getRequestId(), 64);
 		if (Func.isBlank(requestId)) requestId = UUID.randomUUID().toString().replace("-", "");
 		RecommendFeedbackEntity event = new RecommendFeedbackEntity();
 		event.setRequestId(requestId);
 		event.setUserId(userId);
-		event.setSessionId(clean(body.get("sessionId"), 64));
+		event.setSessionId(clean(request.getSessionId(), 64));
 		event.setContentType(contentType);
 		event.setContentId(contentId);
 		event.setEventType(eventType);
-		event.setDurationMs(parseNonNegativeLong(body.get("durationMs")));
-		event.setExtraJson(clean(body.get("extraJson"), 2000));
+		event.setDurationMs(parseNonNegativeLong(request.getDurationMs()));
+		event.setExtraJson(clean(request.getExtraJson(), 2000));
 		event.setOccurredAt(new Date());
 		try {
 			mapper.insert(event);
@@ -98,13 +104,8 @@ public class RecommendFeedbackService {
 		return result;
 	}
 
-	private long parseNonNegativeLong(Object value) {
-		if (value == null || Func.isBlank(String.valueOf(value))) return 0L;
-		try {
-			return Math.max(Long.parseLong(String.valueOf(value)), 0L);
-		} catch (NumberFormatException ignored) {
-			return 0L;
-		}
+	private long parseNonNegativeLong(Long value) {
+		return value == null ? 0L : Math.max(value, 0L);
 	}
 
 	private String normalize(Object value, String defaultValue) {
