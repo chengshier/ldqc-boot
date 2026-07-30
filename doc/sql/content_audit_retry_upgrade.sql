@@ -1,16 +1,17 @@
--- 评论内容安全审核重试升级脚本
+-- 内容安全审核任务与自动重试升级脚本
 -- 适用：MySQL 5.7
 -- 执行前：备份数据库；先在测试库验证。
+-- 业务类型：IMG_DETAIL_TEXT/IMG_DETAIL_MEDIA/TREND_COMMENT/NEWS_COMMENT。
 -- 状态约定：0处理中，1通过，2拒绝，3等待自动重试，4等待人工处理。
 
 CREATE TABLE IF NOT EXISTS `content_audit_task` (
   `id` bigint(20) NOT NULL COMMENT '主键',
   `tenant_id` varchar(12) DEFAULT '000000' COMMENT '租户ID',
-  `biz_type` varchar(32) NOT NULL COMMENT '业务类型：TREND_COMMENT/NEWS_COMMENT',
+  `biz_type` varchar(32) NOT NULL COMMENT '业务类型：动态文案/动态媒体/社区评论/新闻评论',
   `biz_id` bigint(20) NOT NULL COMMENT '业务记录ID',
   `user_id` bigint(20) NOT NULL COMMENT '提交用户ID',
   `open_id` varchar(128) DEFAULT NULL COMMENT '微信OpenID快照',
-  `content_snapshot` text COMMENT '送审文本快照',
+  `content_snapshot` text COMMENT '送审文本或媒体URL快照',
   `audit_status` tinyint(4) NOT NULL DEFAULT '0' COMMENT '0处理中 1通过 2拒绝 3重试中 4待人工',
   `provider_trace_id` varchar(128) DEFAULT NULL COMMENT '审核服务追踪号',
   `result_code` varchar(64) DEFAULT NULL COMMENT '审核结果码',
