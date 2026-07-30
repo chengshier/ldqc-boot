@@ -24,6 +24,7 @@ CALL add_column_if_missing('mall_product', 'category_code', 'varchar(64) DEFAULT
 CALL add_column_if_missing('mall_product', 'category_name', 'varchar(100) DEFAULT NULL COMMENT ''商品分类名称快照''');
 CALL add_column_if_missing('mall_product', 'spec_json', 'text DEFAULT NULL COMMENT ''可兑换规格JSON''');
 CALL add_column_if_missing('mall_product', 'exchange_notice', 'text DEFAULT NULL COMMENT ''兑换与履约说明''');
+CALL add_column_if_missing('mall_product', 'sold_qty', 'int NOT NULL DEFAULT 0 COMMENT ''累计兑换数量''');
 CALL add_column_if_missing('mall_product', 'fulfillment_type', 'varchar(16) NOT NULL DEFAULT ''SHIP'' COMMENT ''履约类型 SHIP/PICKUP/VIRTUAL''');
 CALL add_column_if_missing('mall_product', 'merchant_id', 'bigint DEFAULT NULL COMMENT ''履约商家ID''');
 CALL add_column_if_missing('mall_product', 'merchant_name', 'varchar(150) DEFAULT NULL COMMENT ''履约商家名称''');
