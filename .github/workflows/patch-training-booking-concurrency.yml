@@ -1,0 +1,128 @@
+name: Patch training booking concurrency
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/patch-training-booking-concurrency.yml'
+      - 'doc/sql/training_booking_migration.sql'
+      - 'src/main/java/org/springblade/modules/trainingbooking/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'refactor/market-ready-phase1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+          fetch-depth: 0
+      - name: Add active booking atomic uniqueness
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          sql = Path('doc/sql/training_booking_migration.sql')
+          text = sql.read_text(encoding='utf-8')
+          target = "  `request_id` varchar(64) NOT NULL COMMENT '客户端幂等请求号',\n"
+          addition = target + "  `active_unique_key` varchar(128) DEFAULT NULL COMMENT '活动预约唯一键 userId:trainingId，终态清空',\n"
+          if '`active_unique_key`' not in text:
+              if target not in text:
+                  raise SystemExit('request_id column not found')
+              text = text.replace(target, addition, 1)
+          target = "  UNIQUE KEY `uk_training_booking_user_request` (`user_id`,`request_id`,`is_deleted`),\n"
+          addition = target + "  UNIQUE KEY `uk_training_booking_active` (`active_unique_key`,`is_deleted`),\n"
+          if 'uk_training_booking_active' not in text:
+              if target not in text:
+                  raise SystemExit('request unique index not found')
+              text = text.replace(target, addition, 1)
+          sql.write_text(text, encoding='utf-8')
+
+          entity = Path('src/main/java/org/springblade/modules/trainingbooking/pojo/entity/TrainingBookingEntity.java')
+          text = entity.read_text(encoding='utf-8')
+          target = '\tprivate String requestId;\n'
+          addition = target + '\tprivate String activeUniqueKey;\n'
+          if 'private String activeUniqueKey;' not in text:
+              if target not in text:
+                  raise SystemExit('requestId field not found')
+              text = text.replace(target, addition, 1)
+          entity.write_text(text, encoding='utf-8')
+
+          service = Path('src/main/java/org/springblade/modules/trainingbooking/service/TrainingBookingService.java')
+          text = service.read_text(encoding='utf-8')
+          if 'org.springframework.dao.DuplicateKeyException;' not in text:
+              text = text.replace('import org.springframework.stereotype.Service;\n', 'import org.springframework.dao.DuplicateKeyException;\nimport org.springframework.stereotype.Service;\n', 1)
+
+          old = '''\t\tlong activeCount = bookingMapper.selectCount(Wrappers.<TrainingBookingEntity>lambdaQuery()
+\t\t\t.eq(TrainingBookingEntity::getUserId, userId)
+\t\t\t.eq(TrainingBookingEntity::getTrainingId, trainingId)
+\t\t\t.in(TrainingBookingEntity::getBookingStatus, "SUBMITTED", "CONFIRMED")
+\t\t\t.eq(TrainingBookingEntity::getIsDeleted, 0));
+\t\tif (activeCount > 0) throw new ServiceException("你已有待处理或已确认的课程预约");
+'''
+          new = '''\t\tString activeUniqueKey = userId + ":" + trainingId;
+\t\tTrainingBookingEntity activeBooking = bookingMapper.selectOne(Wrappers.<TrainingBookingEntity>lambdaQuery()
+\t\t\t.eq(TrainingBookingEntity::getActiveUniqueKey, activeUniqueKey)
+\t\t\t.eq(TrainingBookingEntity::getIsDeleted, 0)
+\t\t\t.last("limit 1"));
+\t\tif (activeBooking != null) throw new ServiceException("你已有待处理或已确认的课程预约");
+'''
+          if old not in text and 'String activeUniqueKey = userId + ":" + trainingId;' not in text:
+              raise SystemExit('active count block not found')
+          if old in text:
+              text = text.replace(old, new, 1)
+
+          target = '''\t\tbooking.setRequestId(requestId);
+'''
+          addition = target + '''\t\tbooking.setActiveUniqueKey(activeUniqueKey);
+'''
+          if 'booking.setActiveUniqueKey(activeUniqueKey);' not in text:
+              if target not in text:
+                  raise SystemExit('setRequestId marker not found')
+              text = text.replace(target, addition, 1)
+
+          old = '''\t\tbooking.setStatus(1);
+\t\tbookingMapper.insert(booking);
+\t\treturn booking;
+'''
+          new = '''\t\tbooking.setStatus(1);
+\t\ttry {
+\t\t\tbookingMapper.insert(booking);
+\t\t} catch (DuplicateKeyException exception) {
+\t\t\tTrainingBookingEntity duplicate = bookingMapper.selectOne(Wrappers.<TrainingBookingEntity>lambdaQuery()
+\t\t\t\t.eq(TrainingBookingEntity::getUserId, userId)
+\t\t\t\t.eq(TrainingBookingEntity::getRequestId, requestId)
+\t\t\t\t.eq(TrainingBookingEntity::getIsDeleted, 0)
+\t\t\t\t.last("limit 1"));
+\t\t\tif (duplicate != null) return duplicate;
+\t\t\tthrow new ServiceException("你已有待处理或已确认的课程预约");
+\t\t}
+\t\treturn booking;
+'''
+          if old not in text and 'catch (DuplicateKeyException exception)' not in text:
+              raise SystemExit('booking insert block not found')
+          if old in text:
+              text = text.replace(old, new, 1)
+
+          for status in ('CANCELLED', 'REJECTED', 'COMPLETED'):
+              target = f'\t\tbooking.setBookingStatus("{status}");\n'
+              addition = target + '\t\tbooking.setActiveUniqueKey(null);\n'
+              if addition not in text:
+                  if target not in text:
+                      raise SystemExit(f'{status} transition not found')
+                  text = text.replace(target, addition, 1)
+
+          service.write_text(text, encoding='utf-8')
+          PY
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/patch-training-booking-concurrency.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add doc/sql/training_booking_migration.sql src/main/java/org/springblade/modules/trainingbooking .github/workflows/patch-training-booking-concurrency.yml
+          git commit -m 'fix: make active course booking creation atomic'
+          git push origin HEAD:refactor/market-ready-phase1
