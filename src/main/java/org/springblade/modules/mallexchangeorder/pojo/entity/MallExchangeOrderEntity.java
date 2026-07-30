@@ -1,6 +1,5 @@
 package org.springblade.modules.mallexchangeorder.pojo.entity;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -50,7 +49,6 @@ public class MallExchangeOrderEntity extends TenantEntity {
 	private Date cancelledAt;
 	private String cancelReason;
 
-	@TableField("status")
 	@Schema(description = "订单状态 CREATED/SUCCESS/FAILED/CANCELLED/COMPLETED")
 	private String orderStatus;
 	private String failReason;
