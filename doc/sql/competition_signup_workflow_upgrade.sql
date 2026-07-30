@@ -1,6 +1,7 @@
 -- 赛事报名订单与名额状态机升级
 -- 适用：MySQL 5.7
 -- 执行前请备份 ldqc_competition、ldqc_competition_signup。
+-- 注意：历史报名迁移只处理尚无 order_no 的旧记录，避免重复执行时覆盖新流程订单状态。
 
 SET NAMES utf8mb4;
 
@@ -51,10 +52,10 @@ UPDATE ldqc_competition
        participant_count = GREATEST(IFNULL(participant_count, 0), 0),
        payment_mode = CASE WHEN IFNULL(price, 0) <= 0 THEN 'FREE' ELSE 'WECHAT' END;
 
--- 旧流程允许前端传 pay_status，无法证明历史支付真实性，因此统一待运营核对。
+-- 旧流程允许前端传 pay_status，无法证明历史支付真实性，因此仅将尚未生成订单号的旧记录迁移为待运营核对。
 UPDATE ldqc_competition_signup s
 LEFT JOIN ldqc_competition c ON c.id = s.competition_id
-   SET s.order_no = COALESCE(NULLIF(s.order_no, ''), CONCAT('LEGACY-', s.id)),
+   SET s.order_no = CONCAT('LEGACY-', s.id),
        s.request_id = COALESCE(NULLIF(s.request_id, ''), CONCAT('LEGACY-', s.id)),
        s.active_unique_key = NULL,
        s.competition_title = COALESCE(s.competition_title, c.title),
@@ -67,7 +68,8 @@ LEFT JOIN ldqc_competition c ON c.id = s.competition_id
        s.total_amount = COALESCE(s.total_amount, COALESCE(c.price,0) * GREATEST(IFNULL(s.num_people,1),1)),
        s.payment_mode = CASE WHEN COALESCE(c.price,0) <= 0 THEN 'FREE' ELSE 'WECHAT' END,
        s.order_status = 'LEGACY_REVIEW'
- WHERE s.is_deleted = 0;
+ WHERE s.is_deleted = 0
+   AND (s.order_no IS NULL OR s.order_no = '');
 
 DROP PROCEDURE IF EXISTS add_index_if_missing;
 DELIMITER $$
