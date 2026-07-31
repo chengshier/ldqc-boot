@@ -1,118 +1,50 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.venue.pojo.entity;
 
-import lombok.Data;
-import io.swagger.v3.oas.annotations.media.Schema;
 import com.baomidou.mybatisplus.annotation.TableName;
-import java.math.BigDecimal;
-import java.util.Date;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springblade.core.tenant.mp.TenantEntity;
+
 import java.io.Serial;
+import java.math.BigDecimal;
 
 /**
- * 体育场馆表 实体类
+ * 体育场馆。
  *
- * @author BladeX
- * @since 2026-03-10
+ * <p>ownerUserId 为审核通过后绑定的场馆运营账号。普通用户只能维护自己绑定的场馆，
+ * 管理员可处理异常数据。status 使用基础实体字段：1公开、0停用。</p>
  */
 @Data
 @TableName("ldqc_venue")
-@Schema(description = "Venue对象")
+@Schema(description = "体育场馆")
 @EqualsAndHashCode(callSuper = true)
 public class VenueEntity extends TenantEntity {
 
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	/**
-	 * 场馆名称
-	 */
-	@Schema(description = "场馆名称")
 	private String name;
-	/**
-	 * 场馆主图URL
-	 */
-	@Schema(description = "场馆主图URL")
 	private String coverImage;
-	/**
-	 * 图集,逗号分隔
-	 */
-	@Schema(description = "图集,逗号分隔")
+	/** 图集，逗号分隔或 JSON 数组。 */
 	private String images;
-	/**
-	 * 详细地址
-	 */
-	@Schema(description = "详细地址")
 	private String address;
-	/**
-	 * 经度
-	 */
-	@Schema(description = "经度")
 	private BigDecimal longitude;
-	/**
-	 * 纬度
-	 */
-	@Schema(description = "纬度")
 	private BigDecimal latitude;
-	/**
-	 * 评分
-	 */
-	@Schema(description = "评分")
 	private BigDecimal rating;
-	/**
-	 * 标签,逗号分隔
-	 */
-	@Schema(description = "标签,逗号分隔")
 	private String tags;
-	/**
-	 * 营业时间
-	 */
-	@Schema(description = "营业时间")
 	private String businessHours;
-	/**
-	 * 联系电话
-	 */
-	@Schema(description = "联系电话")
 	private String phone;
-	/**
-	 * 场馆介绍
-	 */
-	@Schema(description = "场馆介绍")
 	private String description;
-
-	/**
-	 * 场馆类型ID
-	 */
-	@Schema(description = "场馆类型ID")
 	private Long typeId;
-	/**
-	 * 排序
-	 */
-	@Schema(description = "排序")
 	private String sortOrder;
+
+	/** 场馆运营用户ID。 */
+	private Long ownerUserId;
+	/** 来源入驻申请ID；平台直接创建时为空。 */
+	private Long sourceApplyId;
+	/** 场馆主体或商户名称。 */
+	private String merchantName;
+	/** 对外服务说明，如预约方式、入场须知。 */
+	private String serviceNotice;
 }

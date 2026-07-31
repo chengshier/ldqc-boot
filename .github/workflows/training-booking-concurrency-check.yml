@@ -1,0 +1,52 @@
+name: Training booking concurrency check
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [refactor/market-ready-phase1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  concurrency-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate active booking uniqueness and cleanup
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          failures = []
+          migration = Path('doc/sql/training_booking_migration.sql').read_text(encoding='utf-8')
+          for token in ('`active_unique_key` varchar(128)', 'uk_training_booking_active'):
+              if token not in migration:
+                  failures.append('training_booking_migration.sql missing ' + token)
+
+          service = Path('src/main/java/org/springblade/modules/trainingbooking/service/TrainingBookingService.java').read_text(encoding='utf-8')
+          for token in (
+              'String activeUniqueKey = userId + ":" + trainingId',
+              'booking.setActiveUniqueKey(activeUniqueKey)',
+              'catch (DuplicateKeyException exception)',
+              'booking.setActiveUniqueKey(null)',
+          ):
+              if token not in service:
+                  failures.append('TrainingBookingService missing ' + token)
+
+          entity = Path('src/main/java/org/springblade/modules/trainingbooking/pojo/entity/TrainingBookingEntity.java').read_text(encoding='utf-8')
+          if 'private String activeUniqueKey;' not in entity:
+              failures.append('TrainingBookingEntity missing activeUniqueKey')
+
+          patch_workflows = sorted(Path('.github/workflows').glob('patch-*.yml'))
+          if patch_workflows:
+              failures.extend('Temporary patch workflow still present: ' + str(path) for path in patch_workflows)
+
+          if failures:
+              raise SystemExit('Training booking concurrency check failed:\n' + '\n'.join(failures))
+          print('Training booking active uniqueness and workflow cleanup passed.')
+          PY

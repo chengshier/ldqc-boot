@@ -1,6 +1,5 @@
 package org.springblade.modules.mallexchangeorder.pojo.entity;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -8,6 +7,7 @@ import lombok.EqualsAndHashCode;
 import org.springblade.core.tenant.mp.TenantEntity;
 
 import java.io.Serial;
+import java.util.Date;
 
 @Data
 @TableName("mall_exchange_order")
@@ -18,31 +18,40 @@ public class MallExchangeOrderEntity extends TenantEntity {
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	@Schema(description = "订单号")
 	private String orderNo;
-
-	@Schema(description = "幂等请求ID")
 	private String requestId;
-
-	@Schema(description = "用户ID")
 	private Long userId;
-
-	@Schema(description = "商品ID")
 	private Long productId;
-
-	@Schema(description = "兑换数量")
 	private Integer qty;
-
-	@Schema(description = "消耗绿豆")
 	private Integer spendPoints;
 
-	@TableField("status")
-	@Schema(description = "订单状态 INIT/SUCCESS/FAILED/CANCELLED")
+	/** 商品快照 */
+	private String productCodeSnapshot;
+	private String productNameSnapshot;
+	private String coverUrlSnapshot;
+	private String specSnapshot;
+	private Integer unitPoints;
+	private String fulfillmentType;
+	private String merchantNameSnapshot;
+
+	/** 收货、领取和虚拟权益信息 */
+	private String receiverName;
+	private String receiverPhone;
+	private String receiverAddress;
+	private String pickupAddressSnapshot;
+	private String pickupCode;
+	private String virtualContent;
+	private String logisticsCompany;
+	private String logisticsNo;
+	private String fulfillmentStatus;
+	private String fulfillmentRemark;
+	private Date completedAt;
+	private Date cancelledAt;
+	private String cancelReason;
+
+	@Schema(description = "订单状态 CREATED/SUCCESS/FAILED/CANCELLED/COMPLETED")
 	private String orderStatus;
-
-	@Schema(description = "失败原因")
 	private String failReason;
-
-	@Schema(description = "发货状态 NONE/PENDING/SENT/FINISHED")
+	/** 历史兼容字段 NONE/PENDING/SENT/FINISHED */
 	private String deliveryStatus;
 }

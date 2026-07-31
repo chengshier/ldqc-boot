@@ -1,0 +1,162 @@
+name: Patch talent course ownership
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/patch-talent-course-ownership.yml'
+      - 'src/main/java/org/springblade/modules/training/service/TalentCourseWorkbenchService.java'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'refactor/market-ready-phase1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/market-ready-phase1
+          fetch-depth: 0
+      - name: Enforce record ownership and editable states
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/java/org/springblade/modules/training/service/TalentCourseWorkbenchService.java')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              'if (trainingId != null) requireOwnedCourse(trainingId, userId);',
+              'if (trainingId != null) requireEditableCourse(trainingId, userId);',
+              1,
+          )
+
+          old = '''\tpublic TrainingChapterEntity saveChapter(Map<String, Object> body, Long userId) {
+\t\tLong trainingId = body == null ? null : Func.toLong(body.get("trainingId"));
+\t\trequireOwnedCourse(trainingId, userId);
+\t\treturn adminService.saveChapter(body);
+\t}
+'''
+          new = '''\tpublic TrainingChapterEntity saveChapter(Map<String, Object> body, Long userId) {
+\t\tLong trainingId = body == null ? null : Func.toLong(body.get("trainingId"));
+\t\tTrainingEntity course = requireEditableCourse(trainingId, userId);
+\t\tLong chapterId = Func.toLong(body.get("id"));
+\t\tif (chapterId != null) {
+\t\t\tTrainingChapterEntity chapter = requireOwnedChapter(chapterId, userId);
+\t\t\tif (!Objects.equals(chapter.getTrainingId(), course.getId())) {
+\t\t\t\tthrow new ServiceException("章节与课程不匹配");
+\t\t\t}
+\t\t}
+\t\treturn adminService.saveChapter(body);
+\t}
+'''
+          if old not in text:
+              raise SystemExit('saveChapter block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''\tpublic void deleteChapter(Long chapterId, Long userId) {
+\t\tTrainingChapterEntity chapter = requireOwnedChapter(chapterId, userId);
+\t\tadminService.deleteChapter(chapter.getId());
+\t}
+'''
+          new = '''\tpublic void deleteChapter(Long chapterId, Long userId) {
+\t\tTrainingChapterEntity chapter = requireOwnedChapter(chapterId, userId);
+\t\trequireEditableCourse(chapter.getTrainingId(), userId);
+\t\tadminService.deleteChapter(chapter.getId());
+\t}
+'''
+          if old not in text:
+              raise SystemExit('deleteChapter block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''\tpublic TrainingLessonEntity saveLesson(Map<String, Object> body, Long userId) {
+\t\tLong trainingId = body == null ? null : Func.toLong(body.get("trainingId"));
+\t\trequireOwnedCourse(trainingId, userId);
+\t\tTrainingLessonEntity lesson = adminService.saveLesson(body);
+'''
+          new = '''\tpublic TrainingLessonEntity saveLesson(Map<String, Object> body, Long userId) {
+\t\tLong trainingId = body == null ? null : Func.toLong(body.get("trainingId"));
+\t\tTrainingEntity course = requireEditableCourse(trainingId, userId);
+\t\tLong lessonId = Func.toLong(body.get("id"));
+\t\tif (lessonId != null) {
+\t\t\tTrainingLessonEntity existed = requireOwnedLesson(lessonId, userId);
+\t\t\tif (!Objects.equals(existed.getTrainingId(), course.getId())) {
+\t\t\t\tthrow new ServiceException("课时与课程不匹配");
+\t\t\t}
+\t\t}
+\t\tLong chapterId = Func.toLong(body.get("chapterId"));
+\t\tif (chapterId != null) {
+\t\t\tTrainingChapterEntity chapter = requireOwnedChapter(chapterId, userId);
+\t\t\tif (!Objects.equals(chapter.getTrainingId(), course.getId())) {
+\t\t\t\tthrow new ServiceException("课时章节与课程不匹配");
+\t\t\t}
+\t\t}
+\t\tTrainingLessonEntity lesson = adminService.saveLesson(body);
+'''
+          if old not in text:
+              raise SystemExit('saveLesson block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''\tpublic void reprocessLesson(Long lessonId, Long userId) {
+\t\trequireOwnedLesson(lessonId, userId);
+\t\tmediaProcessor.processAsync(lessonId);
+\t}
+'''
+          new = '''\tpublic void reprocessLesson(Long lessonId, Long userId) {
+\t\tTrainingLessonEntity lesson = requireOwnedLesson(lessonId, userId);
+\t\trequireEditableCourse(lesson.getTrainingId(), userId);
+\t\tmediaProcessor.processAsync(lessonId);
+\t}
+'''
+          if old not in text:
+              raise SystemExit('reprocessLesson block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''\tpublic void deleteLesson(Long lessonId, Long userId) {
+\t\trequireOwnedLesson(lessonId, userId);
+\t\tadminService.deleteLesson(lessonId);
+\t}
+'''
+          new = '''\tpublic void deleteLesson(Long lessonId, Long userId) {
+\t\tTrainingLessonEntity lesson = requireOwnedLesson(lessonId, userId);
+\t\trequireEditableCourse(lesson.getTrainingId(), userId);
+\t\tadminService.deleteLesson(lessonId);
+\t}
+'''
+          if old not in text:
+              raise SystemExit('deleteLesson block not found')
+          text = text.replace(old, new, 1)
+
+          marker = '''\tprivate TrainingEntity requireOwnedCourse(Long trainingId, Long userId) {
+'''
+          addition = '''\tprivate TrainingEntity requireEditableCourse(Long trainingId, Long userId) {
+\t\tTrainingEntity course = requireOwnedCourse(trainingId, userId);
+\t\tString publishStatus = normalizePublishStatus(course.getPublishStatus(), true);
+\t\tif ("PENDING".equals(publishStatus)) {
+\t\t\tthrow new ServiceException("课程正在审核中，暂不能修改");
+\t\t}
+\t\tif ("PUBLISHED".equals(publishStatus)) {
+\t\t\tthrow new ServiceException("已发布课程请先下架后再修改");
+\t\t}
+\t\treturn course;
+\t}
+
+'''
+          if 'private TrainingEntity requireEditableCourse' not in text:
+              if marker not in text:
+                  raise SystemExit('requireOwnedCourse marker not found')
+              text = text.replace(marker, addition + marker, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/patch-talent-course-ownership.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main/java/org/springblade/modules/training/service/TalentCourseWorkbenchService.java .github/workflows/patch-talent-course-ownership.yml
+          git commit -m 'fix: enforce talent course record ownership and editable states'
+          git push origin HEAD:refactor/market-ready-phase1

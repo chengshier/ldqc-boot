@@ -1,72 +1,23 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.coupontemplate.service;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import org.springblade.modules.coupontemplate.pojo.entity.CouponTemplateEntity;
-import org.springblade.modules.coupontemplate.pojo.vo.CouponTemplateVO;
-import org.springblade.modules.coupontemplate.excel.CouponTemplateExcel;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.springblade.core.mp.base.BaseService;
+import org.springblade.modules.coupontemplate.excel.CouponTemplateExcel;
+import org.springblade.modules.coupontemplate.pojo.entity.CouponTemplateEntity;
+import org.springblade.modules.coupontemplate.pojo.vo.CouponTemplateVO;
+
 import java.util.List;
 
-/**
- * 用户认证类型表 服务类
- *
- * @author BladeX
- * @since 2026-04-02
- */
 public interface ICouponTemplateService extends BaseService<CouponTemplateEntity> {
-	/**
-	 * 自定义分页
-	 *
-	 * @param page 分页参数
-	 * @param couponTemplate 查询参数
-	 * @return IPage<CouponTemplateVO>
-	 */
+
 	IPage<CouponTemplateVO> selectCouponTemplatePage(IPage<CouponTemplateVO> page, CouponTemplateVO couponTemplate);
 
-
-	/**
-	 * 导出数据
-	 *
-	 * @param queryWrapper 查询条件
-	 * @return List<CouponTemplateExcel>
-	 */
 	List<CouponTemplateExcel> exportCouponTemplate(Wrapper<CouponTemplateEntity> queryWrapper);
 
-	/**
-	 * 领券资格检查
-	 */
-	String receiveCheck(Long templateId, Integer growthLevel, Integer authStatus);
+	/** 领券资格检查，成长等级和认证状态均由服务端查询。 */
+	String receiveCheck(Long templateId, Long userId);
 
-	/**
-	 * 领取优惠券
-	 */
+	/** 领取优惠券，requestId 必填并作为用户级幂等键。 */
 	String receive(Long templateId, String requestId, Long userId);
-
 }
-

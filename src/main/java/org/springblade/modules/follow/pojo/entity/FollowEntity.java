@@ -1,62 +1,32 @@
-/**
- * BladeX Commercial License Agreement
- * Copyright (c) 2018-2099, https://bladex.cn. All rights reserved.
- * <p>
- * Use of this software is governed by the Commercial License Agreement
- * obtained after purchasing a license from BladeX.
- * <p>
- * 1. This software is for development use only under a valid license
- * from BladeX.
- * <p>
- * 2. Redistribution of this software's source code to any third party
- * without a commercial license is strictly prohibited.
- * <p>
- * 3. Licensees may copyright their own code but cannot use segments
- * from this software for such purposes. Copyright of this software
- * remains with BladeX.
- * <p>
- * Using this software signifies agreement to this License, and the software
- * must not be used for illegal purposes.
- * <p>
- * THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY. The author is
- * not liable for any claims arising from secondary or illegal development.
- * <p>
- * Author: Chill Zhuang (bladejava@qq.com)
- */
 package org.springblade.modules.follow.pojo.entity;
 
-import lombok.Data;
-import io.swagger.v3.oas.annotations.media.Schema;
 import com.baomidou.mybatisplus.annotation.TableName;
-import java.util.Date;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springblade.core.tenant.mp.TenantEntity;
+
 import java.io.Serial;
 
 /**
- * 关注表 实体类
+ * 用户关注关系。
  *
- * @author BladeX
- * @since 2026-01-27
+ * <p>activeUniqueKey 在关系有效时保存“关注人:被关注人”，取消关注时置空。
+ * 数据库唯一索引以此阻止并发重复关注，同时允许用户取消后重新关注。</p>
  */
 @Data
 @TableName("t_follow")
-@Schema(description = "Follow对象")
+@Schema(description = "用户关注关系")
 @EqualsAndHashCode(callSuper = true)
 public class FollowEntity extends TenantEntity {
 
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	/**
-	 * 用户ID
-	 */
-	@Schema(description = "用户ID")
+	/** 关注发起用户ID。 */
 	private Long uid;
-	/**
-	 * 关注用户ID
-	 */
-	@Schema(description = "关注用户ID")
+	/** 被关注用户ID。 */
 	private Long fid;
-
+	/** 有效关系唯一键，取消关注后置空。 */
+	private String activeUniqueKey;
 }

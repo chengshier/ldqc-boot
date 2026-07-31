@@ -1,0 +1,91 @@
+name: Training booking boundary guard
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [refactor/market-ready-phase1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  booking-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate booking schema identity and status boundaries
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = {
+              'doc/sql/training_booking_migration.sql': [
+                  'CREATE TABLE IF NOT EXISTS `ldqc_training_booking`',
+                  '`tenant_id` varchar(12)',
+                  '`create_dept` bigint',
+                  '`status` int NOT NULL DEFAULT 1',
+                  '`booking_status` varchar(24)',
+                  'uk_training_booking_user_request',
+              ],
+              'src/main/java/org/springblade/modules/trainingbooking/service/TrainingBookingService.java': [
+                  'requireUser(userId)',
+                  'booking.setUserId(userId)',
+                  'booking.setRequestId(requestId)',
+                  'booking.setBookingStatus("SUBMITTED")',
+                  'booking.setBookingStatus("CONFIRMED")',
+                  'booking.setBookingStatus("REJECTED")',
+                  'booking.setBookingStatus("CANCELLED")',
+                  'booking.setBookingStatus("COMPLETED")',
+                  '纯线上课程不支持线下预约',
+              ],
+              'src/main/java/org/springblade/modules/trainingbooking/controller/TrainingBookingController.java': [
+                  'AuthUtil.getUserId()',
+                  '@PostMapping("/submit")',
+                  '@GetMapping("/my-page")',
+                  '@PostMapping("/cancel")',
+                  '@PostMapping("/admin-confirm")',
+                  '@PostMapping("/admin-reject")',
+                  '@PostMapping("/admin-complete")',
+              ],
+              'src/main/java/sql/trainingcourseworkbench.menu.sql': [
+                  "'trainingBookingManager'",
+                  "'/training/bookingManager'",
+                  "'trainingBooking_confirm'",
+                  "'trainingBooking_reject'",
+                  "'trainingBooking_complete'",
+              ],
+          }
+          failures = []
+          for file_name, tokens in required.items():
+              path = Path(file_name)
+              if not path.exists():
+                  failures.append('Missing file: ' + file_name)
+                  continue
+              text = path.read_text(encoding='utf-8')
+              for token in tokens:
+                  if token not in text:
+                      failures.append(f'{file_name} missing marker: {token}')
+
+          service = Path('src/main/java/org/springblade/modules/trainingbooking/service/TrainingBookingService.java')
+          if service.exists():
+              text = service.read_text(encoding='utf-8')
+              for token in ('setPaid', 'PAID', 'prepay', 'transactionId', 'payStatus'):
+                  if token in text:
+                      failures.append('Booking workflow must not invent payment state: ' + token)
+
+          entity = Path('src/main/java/org/springblade/modules/trainingbooking/pojo/entity/TrainingBookingEntity.java')
+          if entity.exists():
+              text = entity.read_text(encoding='utf-8')
+              if 'extends TenantEntity' not in text:
+                  failures.append('TrainingBookingEntity must inherit TenantEntity')
+              if 'private String bookingStatus;' not in text:
+                  failures.append('TrainingBookingEntity missing dedicated bookingStatus')
+
+          if failures:
+              raise SystemExit('Training booking boundary failed:\n' + '\n'.join(failures))
+          print('Training booking identity, status and no-fake-payment boundaries passed.')
+          PY
