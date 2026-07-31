@@ -39,10 +39,12 @@ import org.springblade.core.oss.props.OssProperties;
 import org.springblade.core.secure.utils.AuthUtil;
 import org.springblade.core.tool.utils.StringPool;
 import org.springblade.core.tool.utils.StringUtil;
-import org.springblade.core.tool.utils.WebUtil;
 import org.springblade.modules.resource.pojo.entity.Oss;
 import org.springblade.modules.resource.rule.context.OssContext;
 import org.springblade.modules.resource.service.IOssService;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -124,13 +126,14 @@ public class OssBuilder {
 	 * 获取对象存储实体
 	 *
 	 * @param tenantId 租户ID
+	 * @param code     资源编号
 	 * @return Oss
 	 */
 	public Oss getOss(String tenantId, String code) {
 		String key = tenantId;
 		LambdaQueryWrapper<Oss> lqw = Wrappers.<Oss>query().lambda().eq(Oss::getTenantId, tenantId);
-		// 获取传参的资源编号并查询，若有则返回，若没有则调启用的配置
-		String ossCode = StringUtil.isBlank(code) ? WebUtil.getParameter(OSS_PARAM_KEY) : code;
+		// HTTP 请求允许通过 code 参数指定资源配置；异步任务无请求上下文时使用租户启用配置。
+		String ossCode = resolveOssCode(code);
 		if (StringUtil.isNotBlank(ossCode)) {
 			key = key.concat(StringPool.DASH).concat(ossCode);
 			lqw.eq(Oss::getOssCode, ossCode);
@@ -159,6 +162,23 @@ public class OssBuilder {
 		} else {
 			return oss;
 		}
+	}
+
+	/**
+	 * 解析资源编号。异步任务、定时任务没有 Servlet 请求上下文时返回空编号，
+	 * 由现有查询逻辑选择当前租户启用的对象存储配置。
+	 */
+	private String resolveOssCode(String code) {
+		if (StringUtil.isNotBlank(code)) {
+			return code;
+		}
+		RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+		if (attributes instanceof ServletRequestAttributes) {
+			ServletRequestAttributes servletAttributes = (ServletRequestAttributes) attributes;
+			String requestCode = servletAttributes.getRequest().getParameter(OSS_PARAM_KEY);
+			return StringUtil.isBlank(requestCode) ? StringPool.EMPTY : requestCode;
+		}
+		return StringPool.EMPTY;
 	}
 
 }
