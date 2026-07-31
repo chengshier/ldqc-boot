@@ -94,15 +94,19 @@ public class TrainingCourseAdminService {
 
 	@Transactional(rollbackFor = Exception.class)
 	public void deleteChapter(Long chapterId) {
+		if (chapterId == null || chapterId <= 0) throw new ServiceException("缺少章节ID");
 		TrainingChapterEntity chapter = chapterMapper.selectById(chapterId);
-		if (chapter == null || Func.equals(chapter.getIsDeleted(), 1)) throw new ServiceException("章节不存在");
+		if (chapter == null || Func.equals(chapter.getIsDeleted(), 1)) throw new ServiceException("章节不存在或已删除");
 		long lessonCount = lessonMapper.selectCount(Wrappers.<TrainingLessonEntity>lambdaQuery()
 			.eq(TrainingLessonEntity::getChapterId, chapterId)
 			.eq(TrainingLessonEntity::getIsDeleted, 0));
 		if (lessonCount > 0) throw new ServiceException("章节下仍有课时，请先移动或删除课时");
-		chapter.setIsDeleted(1);
-		chapterMapper.updateById(chapter);
-		markCourseDraft(requireCourse(chapter.getTrainingId()));
+		Long trainingId = chapter.getTrainingId();
+		int affectedRows = chapterMapper.deleteById(chapterId);
+		if (affectedRows != 1) {
+			throw new ServiceException("章节删除失败，数据可能已发生变化，请刷新后重试");
+		}
+		markCourseDraft(requireCourse(trainingId));
 	}
 
 	@Transactional(rollbackFor = Exception.class)
@@ -152,13 +156,17 @@ public class TrainingCourseAdminService {
 
 	@Transactional(rollbackFor = Exception.class)
 	public void deleteLesson(Long lessonId) {
+		if (lessonId == null || lessonId <= 0) throw new ServiceException("缺少课时ID");
 		TrainingLessonEntity lesson = lessonMapper.selectById(lessonId);
-		if (lesson == null || Func.equals(lesson.getIsDeleted(), 1)) throw new ServiceException("课时不存在");
-		lesson.setIsDeleted(1);
-		lessonMapper.updateById(lesson);
-		TrainingEntity course = requireCourse(lesson.getTrainingId());
+		if (lesson == null || Func.equals(lesson.getIsDeleted(), 1)) throw new ServiceException("课时不存在或已删除");
+		Long trainingId = lesson.getTrainingId();
+		int affectedRows = lessonMapper.deleteById(lessonId);
+		if (affectedRows != 1) {
+			throw new ServiceException("课时删除失败，数据可能已发生变化，请刷新后重试");
+		}
+		TrainingEntity course = requireCourse(trainingId);
 		markCourseDraft(course);
-		recalculateCourse(lesson.getTrainingId());
+		recalculateCourse(trainingId);
 	}
 
 	@Transactional(rollbackFor = Exception.class)
